@@ -104,6 +104,7 @@ class SteamClient:
 
     def __post_init__(self):
         self.rl = RateLimiter(self.per_minute)
+        self.last_error: Optional[str] = None
         self._s.headers.update({
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                           "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -116,6 +117,10 @@ class SteamClient:
 
     # ---- core fetch -------------------------------------------------
     def _get(self, url: str, *, cache_s: float = 0.0) -> Optional[Any]:
+        """Parsed JSON, or None. After a None, `last_error` says why --
+        rate_limited | not_found | auth | network | http_<code> | bad_json --
+        so callers can tell "no such item" from "Steam said slow down"."""
+        self.last_error = None
         if cache_s:
             cached = self.store.cache_get(url, cache_s)
             if cached is not None:
@@ -130,23 +135,30 @@ class SteamClient:
             try:
                 r = self._s.get(url, timeout=self.timeout)
             except requests.RequestException as e:
-                print(f"  [net] {type(e).__name__} on {url[:80]} -- retrying")
+                self.last_error = "network"
+                # No URL in the message: it names items or the SteamID,
+                # and CI logs on a public repo are public.
+                print(f"  [net] {type(e).__name__} -- retrying")
                 time.sleep(backoff)
                 backoff *= 2
                 continue
 
             if r.status_code == 429:
+                self.last_error = "rate_limited"
                 print(f"  [429] rate limited, sleeping {backoff:.0f}s")
                 time.sleep(backoff)
                 backoff = min(backoff * 2, 300)
                 continue
             if r.status_code in (401, 403):
-                print(f"  [{r.status_code}] auth required for {url[:80]}")
+                self.last_error = "auth"
+                print(f"  [{r.status_code}] Steam wants a login for this request")
                 return None
             if r.status_code == 500:
                 # Steam returns 500 for unknown market_hash_name.
+                self.last_error = "not_found"
                 return None
             if not r.ok:
+                self.last_error = f"http_{r.status_code}"
                 time.sleep(backoff)
                 backoff *= 2
                 continue
@@ -154,7 +166,9 @@ class SteamClient:
             try:
                 data = r.json()
             except json.JSONDecodeError:
+                self.last_error = "bad_json"
                 return None
+            self.last_error = None
             if cache_s:
                 self.store.cache_put(url, r.text)
             return data

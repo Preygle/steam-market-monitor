@@ -38,5 +38,8 @@ alerts:
   windows_toast: true
   telegram:
     enabled: false
-    bot_token: ""
-    chat_id: ""
+    bot_token: ""                   # from @BotFather
+    chat_id: ""                     # from @userinfobot. The bot answers ONLY this chat.
+    # Answer /price, /sellable, /portfolio ... while `monitor` runs.
+    # (`python -m steammkt.cli bot` runs the commands on their own.)
+    commands: true

@@ -18,6 +18,7 @@ ARMORY_2026_07 = {
     "Fruits And Veggies Stickers",
     "Auto Racing Stickers",
 }
+ARMORY_2026_07_RELEASED = dt.date(2026, 7, 8)
 
 
 def _tag(desc: dict, category: str) -> Optional[str]:
@@ -41,11 +42,17 @@ def import_inventory(store: Store, client: SteamClient, steamid64: str,
     """Pull the public inventory and write holdings with cost basis."""
     raw = client.inventory(steamid64)
     if not raw:
+        # The inventory endpoint 429s far sooner than the market ones. That
+        # is not a privacy problem, and the fix (wait) is different.
+        if getattr(client, "last_error", None) == "rate_limited":
+            return {"error": "Steam is rate-limiting inventory requests",
+                    "hint": "wait 15-30 minutes, then run import-inventory again"}
         return {"error": "inventory empty or private",
                 "hint": "Profile > Edit Profile > Privacy > Inventory: Public"}
 
     counts = {"total": len(raw), "imported": 0, "skipped": 0, "by_type": {}}
     now = dt.datetime.now().isoformat(timespec="seconds")
+    kept: list[str] = []
 
     with store.tx() as c:
         for a in raw:
@@ -81,5 +88,18 @@ def import_inventory(store: Store, client: SteamClient, steamid64: str,
             )
             counts["imported"] += 1
             counts["by_type"][itype] = counts["by_type"].get(itype, 0) + 1
+            kept.append(a["assetid"])
+
+        # A complete fetch IS the inventory, so anything not in it was sold
+        # or traded away. A fetch that failed part-way is not: never read
+        # "page 2 timed out" as "you sold everything on page 2".
+        if getattr(client, "last_error", None) is None:
+            if kept:
+                marks = ",".join("?" * len(kept))
+                cur = c.execute(
+                    f"DELETE FROM holdings WHERE asset_id NOT IN ({marks})", kept)
+            else:
+                cur = c.execute("DELETE FROM holdings")
+            counts["removed"] = cur.rowcount
 
     return counts

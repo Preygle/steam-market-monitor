@@ -1,0 +1,111 @@
+# The market bot, run entirely on GitHub's servers -- nothing on your PC.
+#
+# Every ~10 minutes (GitHub starts schedules late when it is busy) one job:
+#   1. restores the SQLite state the previous run saved
+#   2. answers any Telegram commands that are waiting
+#   3. re-imports the Steam inventory daily, sweeps prices hourly, and sends
+#      break-even / spike alerts to Telegram
+#   4. keeps answering commands for ~8 minutes, then saves state and exits
+#
+# Repository secrets it needs (Settings > Secrets and variables > Actions):
+#   TELEGRAM_BOT_TOKEN  TELEGRAM_CHAT_ID  STEAM_ID64
+#   PASS_PRICE_PAISE    PASSES_BOUGHT     CREDITS_EARNED
+# Until they are set, every run just logs a warning and exits green.
+#
+# This repo is public, so these logs are too. The job prints counts only --
+# never item names, prices or P/L. Those go to Telegram.
+#
+# GitHub pauses schedules in public repos after 60 days without a commit;
+# re-enable from the Actions tab if that happens.
+name: Market bot
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+    inputs:
+      ping:
+        description: "Send a status message to Telegram"
+        type: boolean
+        default: true
+      force_sweep:
+        description: "Sweep prices now, even if the last sweep is recent"
+        type: boolean
+        default: false
+      force_import:
+        description: "Re-import the Steam inventory now"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# One run at a time: two pollers on one bot token make Telegram answer 409,
+# and two runs saving state would race.
+concurrency:
+  group: market-bot
+  cancel-in-progress: false
+
+jobs:
+  bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      # `if:` can't read secrets directly; it can read this.
+      CONFIGURED: ${{ secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != '' && secrets.STEAM_ID64 != '' }}
+    steps:
+      - name: Waiting for repository secrets
+        if: env.CONFIGURED != 'true'
+        run: echo "::warning::Bot secrets are not set yet (see the header of .github/workflows/bot.yml). Skipping."
+
+      - uses: actions/checkout@v4
+        if: env.CONFIGURED == 'true'
+
+      - uses: actions/setup-python@v5
+        if: env.CONFIGURED == 'true'
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        if: env.CONFIGURED == 'true'
+        run: pip install -r requirements.txt
+
+      - name: No-loss invariant gate
+        if: env.CONFIGURED == 'true'
+        run: python scripts/verify_invariant.py
+
+      - name: Restore state
+        if: env.CONFIGURED == 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: data/market.db
+          key: market-db-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: market-db-
+
+      - name: Run the bot
+        if: env.CONFIGURED == 'true'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          STEAM_ID64: ${{ secrets.STEAM_ID64 }}
+          PASS_PRICE_PAISE: ${{ secrets.PASS_PRICE_PAISE }}
+          PASSES_BOUGHT: ${{ secrets.PASSES_BOUGHT }}
+          CREDITS_EARNED: ${{ secrets.CREDITS_EARNED }}
+          # Passed via env, never interpolated into the script body.
+          PING: ${{ inputs.ping }}
+          FORCE_SWEEP: ${{ inputs.force_sweep }}
+          FORCE_IMPORT: ${{ inputs.force_import }}
+        run: |
+          args="--listen-seconds 480"
+          if [ "$PING" = "true" ]; then args="$args --ping"; fi
+          if [ "$FORCE_SWEEP" = "true" ]; then args="$args --force-sweep"; fi
+          if [ "$FORCE_IMPORT" = "true" ]; then args="$args --force-import"; fi
+          python -m steammkt.cli ci $args
+
+      - name: Save state
+        if: always() && env.CONFIGURED == 'true' && hashFiles('data/market.db') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: data/market.db
+          key: market-db-${{ github.run_id }}-${{ github.run_attempt }}

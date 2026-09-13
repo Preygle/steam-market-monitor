@@ -2,7 +2,8 @@
 import sqlite3
 
 import pytest
-from steammkt.alerts import Alert, AlertRouter, Channel
+from fakes import COST, FakeClient, Recorder, hold
+from steammkt.alerts import Alert, AlertRouter
 from steammkt.events import EventCalendar
 from steammkt.fees import WalletConfig, list_price_for_net
 from steammkt.monitor import Monitor
@@ -10,33 +11,8 @@ from steammkt.store import Store
 from steammkt.strategy import Strategy
 
 CFG = WalletConfig()
-COST = 3375                              # one sticker: Rs 1,350 x 3 / 120 credits
 FLOOR = list_price_for_net(COST, CFG)    # list price that exactly breaks even
 ITEM = "Sticker | First Lap (Holo)"
-
-
-class FakeClient:
-    """Stands in for SteamClient, serving canned priceoverview quotes."""
-
-    def __init__(self):
-        self.quotes = {}
-
-    def set(self, name, ask, median=None, volume=20):
-        self.quotes[name] = {"lowest_paise": ask,
-                             "median_paise": ask if median is None else median,
-                             "volume": volume}
-
-    def price_overview(self, name, cache_s=0):
-        return self.quotes.get(name)
-
-
-class Recorder(Channel):
-    def __init__(self):
-        self.sent = []
-
-    def send(self, alert):
-        self.sent.append(alert)
-        return True
 
 
 @pytest.fixture
@@ -50,13 +26,6 @@ def rig(tmp_path):
                        EventCalendar("config/events.yaml"), CFG)
 
     return store, client, rec, monitor
-
-
-def hold(store, name, asset_id, cost=COST):
-    with store.tx() as c:
-        c.execute("INSERT INTO holdings(asset_id,market_hash_name,item_type,"
-                  "cost_basis_paise) VALUES (?,?,?,?)",
-                  (asset_id, name, "sticker", cost))
 
 
 def kinds(rec):

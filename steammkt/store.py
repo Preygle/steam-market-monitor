@@ -91,6 +91,11 @@ CREATE TABLE IF NOT EXISTS sales (
     status      TEXT      -- listed | sold | cancelled
 );
 
+CREATE TABLE IF NOT EXISTS meta (
+    key         TEXT PRIMARY KEY,
+    value       TEXT
+);
+
 CREATE TABLE IF NOT EXISTS http_cache (
     url         TEXT PRIMARY KEY,
     fetched_at  REAL,
@@ -141,6 +146,16 @@ class Store:
     def one(self, sql: str, args: Iterable = ()) -> Optional[sqlite3.Row]:
         r = self.conn.execute(sql, tuple(args)).fetchone()
         return r
+
+    # ---- small key/value state -----------------------------------------
+    def get_meta(self, key: str) -> Optional[str]:
+        r = self.one("SELECT value FROM meta WHERE key=?", (key,))
+        return r["value"] if r else None
+
+    def set_meta(self, key: str, value: str) -> None:
+        with self.tx() as c:
+            c.execute("INSERT OR REPLACE INTO meta(key, value) VALUES (?,?)",
+                      (key, value))
 
     # ---- http cache -------------------------------------------------
     def cache_get(self, url: str, max_age: float) -> Optional[str]:

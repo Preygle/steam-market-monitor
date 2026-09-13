@@ -50,6 +50,7 @@ class Monitor:
     cfg: WalletConfig
     interval_s: int = 3600          # one full sweep per hour is plenty
     quote_cache_s: int = 1800
+    quiet: bool = False             # CI: counts only -- Actions logs can be public
 
     def holdings(self) -> list[dict]:
         rows = self.store.q(
@@ -112,7 +113,8 @@ class Monitor:
             print("no holdings loaded -- run `import-inventory` first")
             return
 
-        print(f"\n[{dt.datetime.now():%Y-%m-%d %H:%M}] sweeping {len(hold)} distinct items")
+        if not self.quiet:
+            print(f"\n[{dt.datetime.now():%Y-%m-%d %H:%M}] sweeping {len(hold)} distinct items")
         plans = []
         month_bias = self.calendar.month_bias(dt.date.today().month)
 
@@ -124,7 +126,8 @@ class Monitor:
                 traceback.print_exc()
                 continue
             if snap is None:
-                print(f"  [{i}/{len(hold)}] {name[:48]:<48} no data")
+                if not self.quiet:
+                    print(f"  [{i}/{len(hold)}] {name[:48]:<48} no data")
                 continue
 
             plan = self.strategy.build(
@@ -142,16 +145,22 @@ class Monitor:
                 clears = was_clear      # no ask this pass: keep last known state
             self._persist(plan, clears)
 
-            flag = {"list_now": "!!", "list_patient": " >",
-                    "unsellable": "xx", "hold": "  "}.get(plan.action, "  ")
-            ask = f"{snap.lowest_paise/100:,.2f}" if snap.lowest_paise else "-"
-            print(f"  [{i}/{len(hold)}] {flag} {name[:44]:<44} "
-                  f"ask={ask:>9} vol={snap.volume_24h:<5} {plan.action}")
+            if not self.quiet:
+                flag = {"list_now": "!!", "list_patient": " >",
+                        "unsellable": "xx", "hold": "  "}.get(plan.action, "  ")
+                ask = f"{snap.lowest_paise/100:,.2f}" if snap.lowest_paise else "-"
+                print(f"  [{i}/{len(hold)}] {flag} {name[:44]:<44} "
+                      f"ask={ask:>9} vol={snap.volume_24h:<5} {plan.action}")
 
             self._alert(plan, snap, was_clear, clears)
 
         res = evaluate_portfolio(plans)
-        print("\n" + res.report())
+        if self.quiet:
+            print(f"swept {len(plans)} of {len(hold)} items: "
+                  f"{res.sellable_count} sellable, {res.underwater_count} "
+                  f"underwater, {res.illiquid_count} held")
+        else:
+            print("\n" + res.report())
 
     def _alert(self, plan: SellPlan, snap: MarketSnapshot,
                was_clear: Optional[bool], clears: Optional[bool]) -> None:

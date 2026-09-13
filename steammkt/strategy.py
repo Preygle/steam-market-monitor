@@ -105,6 +105,10 @@ class Strategy:
     spike_threshold: float = 0.15  # >15% above fair value == a spike worth taking
     min_volume: int = 1            # below this, treat as illiquid
 
+    def floor_net(self, cost_basis_paise: int) -> int:
+        """What a sale must net: cost basis plus min_margin, rounded up."""
+        return int(math.ceil(cost_basis_paise * (1.0 + self.min_margin)))
+
     def build(self, snap: MarketSnapshot, cost_basis_paise: int,
               qty: int = 1, item_type: str = "other",
               month: Optional[int] = None, month_bias: float = 0.0) -> SellPlan:
@@ -117,7 +121,7 @@ class Strategy:
         )
 
         # 1. The floor. Non-negotiable.
-        floor_net = int(math.ceil(cost_basis_paise * (1.0 + self.min_margin)))
+        floor_net = self.floor_net(cost_basis_paise)
         plan.floor_list_paise = list_price_for_net(floor_net, self.cfg)
 
         fv = snap.fair_value_paise()
@@ -177,24 +181,25 @@ class Strategy:
 
         # 7. Normal patient listing.
         net_at_target = net_from_buyer_price(plan.target_list_paise, self.cfg)
-        margin = (net_at_target - cost_basis_paise) / cost_basis_paise \
-            if cost_basis_paise else 0.0
+        # A zero cost basis (a free drop, or an item you don't hold) has no
+        # meaningful margin; "+0% vs cost" would read as bare break-even.
+        vs_cost = (f" ({(net_at_target - cost_basis_paise) / cost_basis_paise * 100:+.0f}%"
+                   f" vs cost)" if cost_basis_paise else "")
 
         if plan.target_list_paise <= current * 1.02:
             plan.action = "list_patient"
             plan.rationale = (
                 f"target Rs{plan.target_list_paise/100:,.2f} sits at/below the "
                 f"current ask Rs{current/100:,.2f}; nets "
-                f"Rs{net_at_target/100:,.2f} ({margin*100:+.0f}% vs cost). "
-                f"Should fill."
+                f"Rs{net_at_target/100:,.2f}{vs_cost}. Should fill."
             )
             plan.confidence = 0.7
         else:
             plan.action = "list_patient"
             plan.rationale = (
                 f"asking Rs{plan.target_list_paise/100:,.2f} above the current "
-                f"Rs{current/100:,.2f} ask. Nets Rs{net_at_target/100:,.2f} "
-                f"({margin*100:+.0f}%). Will sit in the queue -- fine, we can wait."
+                f"Rs{current/100:,.2f} ask. Nets Rs{net_at_target/100:,.2f}"
+                f"{vs_cost}. Will sit in the queue -- fine, we can wait."
             )
             plan.confidence = 0.45
 

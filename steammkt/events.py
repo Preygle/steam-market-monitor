@@ -48,6 +48,13 @@ class EventCalendar:
                 out.append(e)
         return out
 
+    def upcoming(self, after: dt.date, scope: Optional[str] = None,
+                 limit: int = 3) -> list[Event]:
+        """The next events strictly after a date, optionally scope-filtered."""
+        out = [e for e in self.events if e.date > after and (
+            not scope or not e.scope or scope in e.scope or "all" in e.scope)]
+        return out[:limit]
+
     def attribute(self, when: dt.date, pct_move: float,
                   scope: Optional[str] = None, window_days: int = 5) -> str:
         """Explain a price move. Returns a human-readable attribution."""
