@@ -1,0 +1,294 @@
+# CS2 market event calendar -- used to attribute price spikes/dips and to
+# time sells. Sourced from Valve announcements, HLTV, and market trackers.
+# `confidence` reflects how well the date was corroborated in research.
+#
+# effect: what it did to prices. direction is from the SELLER's point of view.
+#   supply_up   -> more items exist -> prices fall
+#   supply_down -> items become unobtainable -> prices rise
+#   demand_up / demand_down
+#
+# THIS IS THE SPIKE-ATTRIBUTION KEY. When the analyser sees a >X% move in an
+# item's history, it looks here for an event within the window and labels it.
+
+events:
+  - date: 2024-02-06
+    name: Kilowatt Case release
+    category: case_release
+    effect: supply_up
+    scope: [case, skin]
+    note: First standard CS2 case; pressured prior newest case.
+    confidence: medium   # sources disagree Feb 6 vs 7
+
+  - date: 2024-03-21
+    name: Copenhagen 2024 Major stickers released
+    category: major_capsule
+    effect: supply_up
+    scope: [sticker]
+    confidence: high
+
+  - date: 2024-03-17
+    name: PGL Major Copenhagen 2024 begins
+    category: major
+    effect: demand_up
+    scope: [sticker, souvenir]
+    confidence: high
+
+  - date: 2024-04-25
+    name: Dust2 replaces Overpass in Active Duty
+    category: map_pool
+    effect: demand_down
+    scope: [overpass_collection]
+    confidence: high
+
+  - date: 2024-06-05
+    name: AK-47 Case Hardened blue gem sells >$1M
+    category: exogenous
+    effect: demand_up
+    scope: [pattern_items]
+    confidence: high
+
+  - date: 2024-10-02
+    name: ARMORY LAUNCH + Gallery Case + Overpass/Graphic/Sport&Field collections
+    category: armory_rotation
+    effect: supply_up
+    scope: [skin, sticker, charm, case]
+    note: New parallel acquisition channel. Baseline for all Armory items.
+    confidence: high
+
+  - date: 2024-11-27
+    name: Shanghai 2024 Major stickers released
+    category: major_capsule
+    effect: supply_up
+    scope: [sticker]
+    confidence: high
+
+  - date: 2024-11-30
+    name: Perfect World Shanghai Major 2024 begins
+    category: major
+    effect: demand_up
+    scope: [sticker, souvenir]
+    confidence: high
+
+  - date: 2025-03-31
+    name: Fever Case + 2025 Train Collection added to Armory
+    category: armory_rotation
+    effect: supply_up
+    scope: [skin, case]
+    confidence: high
+
+  - date: 2025-05-23
+    name: Austin 2025 Major stickers + Viewer Pass released
+    category: major_capsule
+    effect: supply_up
+    scope: [sticker]
+    confidence: high
+
+  - date: 2025-06-03
+    name: BLAST.tv Austin Major 2025 begins
+    category: major
+    effect: demand_up
+    scope: [sticker, souvenir]
+    confidence: high
+
+  - date: 2025-07-16
+    name: Overpass replaces Anubis in Active Duty
+    category: map_pool
+    effect: demand_up
+    scope: [overpass_collection]
+    confidence: medium
+
+  - date: 2025-09-17
+    name: Genesis Terminal release
+    category: case_release
+    effect: supply_up
+    scope: [skin]
+    confidence: high
+
+  - date: 2025-10-02
+    name: Austin 2025 capsules REMOVED from sale
+    category: discontinuation
+    effect: supply_down
+    scope: [sticker]
+    note: Prices roughly DOUBLED within hours. Precedent - Paris 2023 went 3-4x in a year.
+    confidence: high
+
+  - date: 2025-10-17
+    name: CS2 market cap tops $6B (prior ATH)
+    category: exogenous
+    effect: demand_up
+    scope: [all]
+    confidence: medium
+
+  - date: 2025-10-23
+    name: TRADE-UP EXPANSION - 5 Coverts -> knife/gloves
+    category: trade_policy
+    effect: supply_up
+    scope: [knife, gloves]
+    note: >
+      Largest shock in the dataset. Market cap fell ~28-30% (~$1.7-2.5B) in
+      24-30h. Knives/gloves -60-70%. Covert "fodder" skins spiked 5-20x.
+      Proof that CS2 reprices in HOURS, not days, on supply news.
+    confidence: high
+
+  - date: 2025-10-15
+    name: Gallery Case + Graphic Design Collection retired from Armory
+    category: discontinuation
+    effect: supply_down
+    scope: [skin, case]
+    confidence: low   # "~Oct 2025", exact date unverified
+
+  - date: 2025-11-12
+    name: Budapest 2025 Major stickers released
+    category: major_capsule
+    effect: supply_up
+    scope: [sticker]
+    confidence: high
+
+  - date: 2025-11-24
+    name: StarLadder Budapest Major 2025 begins
+    category: major
+    effect: demand_up
+    scope: [sticker, souvenir]
+    confidence: high
+
+  - date: 2025-12-06
+    name: Steam Market minimum price / fee structure changed
+    category: market_policy
+    effect: demand_down
+    scope: [low_value_items]
+    note: >
+      CRITICAL FOR THIS PORTFOLIO. Effective fees reportedly up to ~60% on
+      minimum-price listings in some currencies. Squeezes cheap-sticker
+      liquidity - which is most of a 120-item Armory batch.
+    confidence: medium
+
+  - date: 2025-12-10
+    name: Valve TOR bans skin-gambling sponsorships at events
+    category: market_policy
+    effect: demand_down
+    scope: [all]
+    confidence: high
+
+  - date: 2026-01-21
+    name: Armory rotation (AK-47 Aphrodite added as limited)
+    category: armory_rotation
+    effect: supply_up
+    scope: [skin]
+    confidence: medium
+
+  - date: 2026-02-25
+    name: New York AG sues Valve over loot boxes
+    category: regulatory
+    effect: demand_down
+    scope: [all]
+    note: Litigation overhang; contributed to marketplace consolidation.
+    confidence: high
+
+  - date: 2026-03-11
+    name: Dead Hand Terminal - first new gloves since Dec 2020
+    category: case_release
+    effect: supply_up
+    scope: [gloves, skin]
+    confidence: high
+
+  - date: 2026-04-15
+    name: Armory retires Train 2025, Sport & Field, Sugarface 2, Elemental Craft
+    category: discontinuation
+    effect: supply_down
+    scope: [skin, sticker]
+    confidence: low   # "~mid-April 2026"
+
+  - date: 2026-05-22
+    name: MAJOR STICKER SYSTEM REPLACED - capsules -> token "Major Shop"
+    category: market_policy
+    effect: demand_down
+    scope: [sticker]
+    note: >
+      STRUCTURAL BREAK. Ends the capsule crash-then-recover pattern for
+      Major stickers. Sticker prices now move continuously with demand.
+      Any model trained on pre-2026-05-22 Major sticker behaviour is
+      INVALID after this date.
+    confidence: high
+
+  - date: 2026-06-02
+    name: IEM Cologne Major 2026 begins
+    category: major
+    effect: demand_up
+    scope: [sticker, souvenir]
+    confidence: high
+
+  - date: 2026-07-03
+    name: Jackass Sticker Capsule (direct purchase, NOT Armory)
+    category: case_release
+    effect: supply_up
+    scope: [sticker]
+    confidence: high
+
+  - date: 2026-07-08
+    name: ">>> ARMORY ROTATION - Arabesque + Spy Tech collections, Fruits & Veggies + Auto Racing stickers <<<"
+    category: armory_rotation
+    effect: supply_up
+    scope: [skin, sticker]
+    note: >
+      THIS IS THE USER'S BATCH. 89 items (34 skins + 55 stickers).
+      Also retired Sport & Field / Train 2025 from the pool.
+      Expect the classic new-supply decay: elevated launch price, grinding
+      decline for 4-10 weeks as passes are ground out and redeemed, then
+      stabilisation once redemption slows.
+    confidence: high
+
+  - date: 2026-08-15
+    name: CS2 market cap reaches new ATH ~$7B
+    category: exogenous
+    effect: demand_up
+    scope: [all]
+    note: Holding into strength, not weakness.
+    confidence: medium
+
+  - date: 2026-11-25
+    name: PGL Major Singapore 2026 begins (FUTURE)
+    category: major
+    effect: demand_up
+    scope: [sticker, souvenir]
+    note: >
+      FORWARD-LOOKING SELL WINDOW. Historical pattern - non-sticker items dip
+      5-15% in the 4-6 weeks BEFORE a Major, then run +10-20% at peak
+      viewership, staying elevated 8-15% for 1-2 weeks after. That post-Major
+      fortnight is the highest-probability sell window before year end.
+    confidence: high
+
+# ---------------------------------------------------------------------
+# Seasonality priors. Magnitudes are single-sourced and UNVERIFIED --
+# treated as weak priors only, never as hard signals.
+seasonality:
+  monthly_bias:      # rough % vs trend
+    1:  +0.10
+    2:  +0.02
+    3:  +0.05
+    4:  -0.03
+    5:  -0.05
+    6:  -0.10
+    7:  -0.15   # summer slump + Steam Summer Sale
+    8:  -0.12
+    9:  -0.02
+    10: -0.05
+    11: +0.05
+    12: +0.15   # winter peak
+  confidence: low
+  note: >
+    Directionally corroborated (summer slump / winter uplift), magnitudes
+    from a single vendor blog. Used only to break ties, never to justify
+    selling below floor.
+
+# New-item price decay curve, for items released in the last ~90 days.
+decay_model:
+  phases:
+    - {days: [0, 7],    label: launch,      expect: "elevated, thin volume, wide spread"}
+    - {days: [7, 45],   label: supply_flood, expect: "grinding decline as passes are redeemed"}
+    - {days: [45, 90],  label: stabilise,   expect: "trough, volume normalises"}
+    - {days: [90, 999], label: maturity,    expect: "slow drift up as supply stops growing"}
+  note: >
+    Armory items do NOT enter the passive weekly drop pool, so their supply
+    stops growing once the rotation ends. That is structurally bullish for
+    patient holders and is the core reason waiting months is the right call
+    for this portfolio.

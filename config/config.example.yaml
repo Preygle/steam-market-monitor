@@ -1,0 +1,42 @@
+# Copy to config/config.yaml and fill in.
+
+steam:
+  steamid64: "7656119XXXXXXXXXX"   # your 64-bit SteamID
+  currency: 24                      # 24 = INR
+  # OPTIONAL. Unlocks /market/pricehistory/ (full daily series).
+  # Get it from a logged-in browser: DevTools > Application > Cookies >
+  # steamcommunity.com > steamLoginSecure. Treat it like a password.
+  # Leave blank to run fully anonymous.
+  session_cookie: ""
+  requests_per_minute: 15           # Steam 429s above ~20. Do not raise.
+
+wallet:
+  # Verify these against a real Steam sell dialog before trusting the plan.
+  # Run:  python -m steammkt.cli calibrate --price 100
+  fee_percent: 0.05
+  publisher_fee: 0.10
+  fee_minimum: 1                    # paise
+  min_listing_price: 100            # paise (Rs 1.00)
+
+cost_basis:
+  pass_price_paise: 0               # <-- WHAT ONE ARMORY PASS COST YOU, in paise
+  passes_bought: 0                  # <-- how many you bought
+  credits_earned: null              # null = assume 40/pass (optimistic)
+
+strategy:
+  min_margin: 0.0                   # 0.0 = pure break-even. 0.10 = +10% floor
+  patience_premium: 0.06            # ask this % over fair value
+  spike_threshold: 0.15             # >15% over fair value counts as a spike
+  min_volume: 1                     # below this, treat as illiquid
+
+monitor:
+  interval_seconds: 3600
+  quote_cache_seconds: 1800
+
+alerts:
+  console: true
+  windows_toast: true
+  telegram:
+    enabled: false
+    bot_token: ""
+    chat_id: ""

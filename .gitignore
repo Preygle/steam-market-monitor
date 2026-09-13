@@ -1,0 +1,23 @@
+# --- personal data: never commit -------------------------------------
+config/config.yaml          # SteamID, cost basis, session cookie
+config/watchlist.yaml       # your specific holdings
+scripts/snapshot_*.py       # inventory snapshots with real prices/costs
+data/                       # local SQLite db, cached HTTP responses
+*.db
+
+# --- python ----------------------------------------------------------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# --- editors / os ----------------------------------------------------
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

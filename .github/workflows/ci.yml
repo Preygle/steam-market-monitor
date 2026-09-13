@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Tests (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run test suite
+        run: python -m pytest -v
+
+      - name: Verify the no-loss invariant holds
+        run: python scripts/verify_invariant.py
+
+  notify:
+    name: Telegram notification
+    runs-on: ubuntu-latest
+    needs: [test]
+    if: always()
+    steps:
+      - name: Send result to Telegram
+        env:
+          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          STATUS: ${{ needs.test.result }}
+          # Passed via env, never interpolated into the script body:
+          # a commit message is attacker-controlled text on pull requests.
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -u
+          if [ -z "${BOT_TOKEN}" ] || [ -z "${CHAT_ID}" ]; then
+            echo "::notice::Telegram secrets not configured - skipping notification."
+            echo "To enable: Settings > Secrets and variables > Actions > New repository secret"
+            echo "  TELEGRAM_BOT_TOKEN   (from @BotFather)"
+            echo "  TELEGRAM_CHAT_ID     (from @userinfobot)"
+            exit 0
+          fi
+
+          if [ "${STATUS}" = "success" ]; then ICON="PASS"; else ICON="FAIL"; fi
+          SUBJECT=$(printf '%s' "${COMMIT_MSG}" | head -n 1 | cut -c1-100)
+
+          TEXT="[${ICON}] steam-market-monitor CI: ${STATUS}
+          branch: ${GITHUB_REF_NAME}
+          commit: $(printf '%s' "${GITHUB_SHA}" | cut -c1-7) ${SUBJECT}
+          ${RUN_URL}"
+
+          curl -sS -X POST \
+            "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${CHAT_ID}" \
+            --data-urlencode "text=${TEXT}" \
+            --data-urlencode "disable_web_page_preview=true" \
+            -o /dev/null -w 'telegram http %{http_code}\n'
+
+      - name: Fail the workflow if tests failed
+        if: needs.test.result != 'success'
+        run: exit 1
