@@ -147,6 +147,9 @@ def test_login_sends_a_qr_then_stores_the_login_sealed(mon, monkeypatch):
     assert "Logged in to Steam as preygle_acct" in texts(api)[-1]
     assert sa.load_login(mon.store, bot.vault)["refresh_token"] == REFRESH
     assert "Steam login  active" in status_report(mon)
+    # Regression: a finished login must not hold the listen window open for
+    # the rest of the QR's lifetime (that spun this test for 4 minutes).
+    assert len(api.calls) < 10
 
 
 def test_login_is_refused_without_state_key(mon):

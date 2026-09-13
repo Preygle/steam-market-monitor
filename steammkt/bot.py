@@ -301,11 +301,12 @@ class TelegramBot:
         deadline = time.monotonic() + seconds
         handled = 0
         while True:
-            if self.login:
-                deadline = max(deadline, self.login_deadline)
-            handled += self._poll(self._wait(deadline - time.monotonic()))
+            # Recomputed each pass: once the login resolves, the window
+            # snaps back to what the caller asked for.
+            end = max(deadline, self.login_deadline) if self.login else deadline
+            handled += self._poll(self._wait(end - time.monotonic()))
             self._poll_login()
-            if deadline - time.monotonic() < 1 and not self.login:
+            if not self.login and deadline - time.monotonic() < 1:
                 break
         self.confirm()
         return handled

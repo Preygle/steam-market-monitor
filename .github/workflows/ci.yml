@@ -14,6 +14,8 @@ jobs:
   test:
     name: Tests (py${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    # The suite takes seconds. Anything longer is a hang, not a slow test.
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
