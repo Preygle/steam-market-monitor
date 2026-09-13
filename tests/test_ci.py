@@ -2,6 +2,7 @@
 an inventory refresh that notices sold items, and logs that don't leak."""
 import datetime as dt
 import json
+from types import SimpleNamespace
 
 import pytest
 from fakes import FakeApi, FakeClient, hold
@@ -123,6 +124,17 @@ def test_a_partial_fetch_never_drops_items(tmp_path):
     import_inventory(store, Inventory([asset("1", "Sticker | A")],
                                       last_error="rate_limited"), "x", COSTS)
     assert held_ids(store) == ["1", "2"]
+
+
+def test_backfill_keeps_one_volume_weighted_point_per_day(tmp_path):
+    """Steam's last month comes hourly; a day must not be just its last hour."""
+    store = Store(tmp_path / "m.db")
+    client = SimpleNamespace(price_history=lambda name: [
+        {"ts": "Jul 08 2026 01: +0", "median_paise": 1000, "volume": 1},
+        {"ts": "Jul 08 2026 02: +0", "median_paise": 2000, "volume": 3}])
+    assert cli.backfill_history(store, client, ["x"], quiet=True) == 1
+    r = store.one("SELECT median_paise, volume FROM price_history")
+    assert (r["median_paise"], r["volume"]) == (1750, 4)
 
 
 # ---------------------------------------------------------------- scheduling

@@ -139,7 +139,9 @@ def price_report(mon: Monitor, query: str, today: Optional[dt.date] = None) -> s
     plan = mon.strategy.build(
         snap, cost, qty=h["qty"] if h else 1,
         item_type=(h["item_type"] if h else None) or "other",
-        month_bias=mon.calendar.month_bias(today.month))
+        month_bias=mon.calendar.month_bias(today.month),
+        forecast=mon.forecast_for(name, snap.lowest_paise or snap.fair_value_paise(),
+                                  h["item_type"] if h else None))
     plan.validate(mon.cfg)
 
     L = [name + (f"   x{plan.qty}" if h else "   (not held)"), ""]
@@ -170,6 +172,17 @@ def price_report(mon: Monitor, query: str, today: Optional[dt.date] = None) -> s
 
     L.append("")
     L.extend(_history_lines(mon, name, today))
+    fc = plan.forecast
+    if fc and fc.days >= 5:
+        L.append(f"Trend        {fc.mu * 30 * 100:+.1f}%/month over {fc.days} days,"
+                 f" volatility {fc.sigma * 100:.1f}%/day")
+        lo, hi = fc.band(90)
+        L.append(f"Next 90 days {rs(lo)} - {rs(hi)} (80% band)")
+    if fc and h and cost and plan.floor_list_paise > (snap.lowest_paise or 0):
+        L.append("Break-even odds " + "  ".join(
+            f"{d}d {fc.p_touch(plan.floor_list_paise, d):.0%}" for d in HORIZONS))
+    for d, move, why in (fc.spikes[-3:] if fc else []):
+        L.append(f"Spike {d} {move * 100:+.0f}%: {why}")
     if h and h["source"] in ARMORY_2026_07:
         days = (today - ARMORY_2026_07_RELEASED).days
         L.append(f"Armory batch day {days}: {mon.calendar.decay_phase(days)} phase")
@@ -305,6 +318,68 @@ def holdings_report(mon: Monitor) -> str:
             L.append(f"{short(name)} x{qty}  ask {_num(ask)}")
     if not quotes:
         L += ["", "No quotes yet -- start the monitor, or /price <item>."]
+    return "\n".join(L)
+
+
+HORIZONS = (90, 180, 365)
+
+
+def plan_report(mon: Monitor) -> str:
+    """The whole sell plan, item by item, with the odds on everything that
+    has to wait for the market -- the answer to "will this break even?"."""
+    held = mon.holdings()
+    if not held:
+        return NO_HOLDINGS
+    plans = {r["market_hash_name"]: dict(r) for r in mon.store.q("SELECT * FROM plan")}
+    quotes = _latest_quotes(mon)
+    H = mon.strategy.horizon_days
+    now, later, idle = [], [], []
+    cost_total = expected = 0.0
+    for h in held:
+        name, qty, cost = h["market_hash_name"], h["qty"], h["cost"] or 0
+        cost_total += cost * qty
+        p, ask = plans.get(name), (quotes.get(name) or {}).get("lowest_paise")
+        if not p or not ask:
+            idle.append(f"{short(name)} x{qty}: no market data yet")
+            continue
+        if p["action"] in SELLABLE:
+            price = p["target_list_paise"]
+        elif p["action"] == "unsellable":
+            price = p["floor_list_paise"]           # rests at break-even
+        else:
+            idle.append(f"{short(name)} x{qty}: {p['action']} -- "
+                        f"{(p['rationale'] or '')[:70]}")
+            continue
+        net = net_from_buyer_price(price, mon.cfg)
+        fc = mon.forecast_for(name, ask, h["item_type"])
+        expected += (fc.p_touch(price, H) if fc else float(price <= ask)) * net * qty
+        pl = (net - cost) / 100
+        if price <= ask:
+            now.append((-pl, f"{short(name)} x{qty}: list {_num(price)} -> "
+                             f"{_num(net)} ({pl:+,.2f} each)"))
+        else:
+            odds = "/".join(f"{fc.p_touch(price, d) if fc else 0:.0%}" for d in HORIZONS)
+            later.append((price / ask,
+                          f"{short(name)} x{qty}: list {_num(price)} (now {_num(ask)}, "
+                          f"{price / ask:.2f}x) {pl:+,.2f} each; "
+                          f"odds 90d/180d/1y {odds}"))
+    L = [f"Sell plan: {len(held)} items, {sum(h['qty'] for h in held)} units, "
+         f"horizon {H} days.",
+         "Every price nets at least your cost after Steam's fee.", ""]
+    if now:
+        L.append(f"SELLS AT TODAY'S PRICES ({len(now)})")
+        L += [t for _, t in sorted(now)]
+        L.append("")
+    if later:
+        L.append(f"WAITS FOR THE MARKET ({len(later)}) -- fills only if it gets there")
+        L += [t for _, t in sorted(later)]
+        L.append("")
+    if idle:
+        L += ["NOT LISTED", *idle, ""]
+    L.append(f"Cost of everything held   {rs(int(cost_total))}")
+    L.append(f"Expected back in {H} days {rs(int(expected))}  (odds x net, summed)")
+    L.append("Nothing is ever sold below cost, so selling can't add to a loss. "
+             "Items that never reach break-even simply stay in your inventory.")
     return "\n".join(L)
 
 

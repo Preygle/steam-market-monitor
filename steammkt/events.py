@@ -36,6 +36,16 @@ class EventCalendar:
         self.events.sort(key=lambda e: e.date)
         self.seasonality = raw.get("seasonality", {})
         self.decay_model = raw.get("decay_model", {})
+        self.recurring = raw.get("recurring", {})
+
+    @property
+    def weekly_reset_weekday(self) -> int:
+        """Monday = 0. Wednesday unless events.yaml says otherwise."""
+        return int(self.recurring.get("weekly_drop_reset", {}).get("weekday", 2))
+
+    @property
+    def weekly_reset_scope(self) -> list[str]:
+        return self.recurring.get("weekly_drop_reset", {}).get("scope", ["case", "skin"])
 
     def near(self, when: dt.date, window_days: int = 5,
              scope: Optional[str] = None) -> list[Event]:

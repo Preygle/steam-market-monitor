@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from .fees import WalletConfig, list_price_for_net, net_from_buyer_price
+from .predict import optimal_ask
 
 
 @dataclass
@@ -78,6 +79,7 @@ class SellPlan:
     confidence: float = 0.0
     rationale: str = ""
     expected_net_paise: int = 0
+    forecast: Optional[object] = None   # predict.Forecast, when there was data
 
     def validate(self, cfg: WalletConfig) -> None:
         """Hard assertion of the no-loss invariant. Raises rather than warns."""
@@ -104,6 +106,7 @@ class Strategy:
     patience_premium: float = 0.06 # ask this much above fair value; we can wait
     spike_threshold: float = 0.15  # >15% above fair value == a spike worth taking
     min_volume: int = 1            # below this, treat as illiquid
+    horizon_days: int = 180        # how long a listing may wait for its price
 
     def floor_net(self, cost_basis_paise: int) -> int:
         """What a sale must net: cost basis plus min_margin, rounded up."""
@@ -111,13 +114,15 @@ class Strategy:
 
     def build(self, snap: MarketSnapshot, cost_basis_paise: int,
               qty: int = 1, item_type: str = "other",
-              month: Optional[int] = None, month_bias: float = 0.0) -> SellPlan:
+              month: Optional[int] = None, month_bias: float = 0.0,
+              forecast=None) -> SellPlan:
 
         plan = SellPlan(
             market_hash_name=snap.market_hash_name,
             qty=qty,
             cost_basis_paise=cost_basis_paise,
             item_type=item_type,
+            forecast=forecast,
         )
 
         # 1. The floor. Non-negotiable.
@@ -158,8 +163,13 @@ class Strategy:
             plan.confidence = 0.1
             return plan
 
-        # 5. Target price.
-        desired = int(fv * (1.0 + self.patience_premium) * (1.0 + month_bias))
+        # 5. Target price. With a forecast: the ask with the best expected
+        # payout inside the horizon. Without one: fair value plus a premium.
+        if forecast is not None:
+            desired = optimal_ask(forecast, plan.floor_list_paise,
+                                  self.horizon_days, self.cfg)[0]
+        else:
+            desired = int(fv * (1.0 + self.patience_premium) * (1.0 + month_bias))
         plan.target_list_paise = max(desired, plan.floor_list_paise)
 
         # 6. Spike detection -- is the market ALREADY paying above our target?

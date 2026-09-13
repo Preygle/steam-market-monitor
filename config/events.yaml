@@ -90,6 +90,17 @@ events:
     scope: [sticker, souvenir]
     confidence: high
 
+  - date: 2025-07-15
+    name: Steam Trade Protection -- trades reversible for 7 days
+    category: trade_policy
+    effect: demand_down
+    scope: [all]
+    note: >
+      Items received in a trade are protected for 7 days: they can't be
+      consumed, modified or traded on, and the owner can reverse the whole
+      week's trades. Added friction to third-party trading.
+    confidence: high
+
   - date: 2025-07-16
     name: Overpass replaces Anubis in Active Duty
     category: map_pool
@@ -279,6 +290,18 @@ seasonality:
     Directionally corroborated (summer slump / winter uplift), magnitudes
     from a single vendor blog. Used only to break ties, never to justify
     selling below floor.
+
+# Recurring events. Used to label otherwise-unexplained moves, never as a cause.
+recurring:
+  weekly_drop_reset:
+    weekday: 2            # Wednesday (Monday = 0)
+    hour_utc: 1           # sources give 01:00-02:00 GMT
+    effect: supply_up
+    scope: [case, skin]   # the drop pool; Armory items never drop
+    note: >
+      Weekly care package: Prime players who rank up pick two of four items
+      (skins, cases, charm packs, graffiti), adding supply to drop-pool
+      items every week.
 
 # New-item price decay curve, for items released in the last ~90 days.
 decay_model:

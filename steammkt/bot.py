@@ -25,8 +25,9 @@ from typing import Callable, Optional
 from . import steamauth
 from .monitor import Monitor
 from .reports import (alerts_report, events_report, fees_report,
-                      holdings_report, orders_report, portfolio_report,
-                      price_report, sellable_report, status_report)
+                      holdings_report, orders_report, plan_report,
+                      portfolio_report, price_report, sellable_report,
+                      status_report)
 
 TELEGRAM_LIMIT = 4096
 # /price is a live question: re-fetch a quote older than this rather than
@@ -39,6 +40,7 @@ LOGIN_WINDOW_S = 240
 # Registered with Telegram at startup, so they show up in the "/" menu.
 COMMANDS = [
     ("price", "live price, break-even and what to list at. /price nitro"),
+    ("plan", "the full sell plan: list price and break-even odds per item"),
     ("sellable", "items that clear break-even right now"),
     ("portfolio", "cost, current value and P/L of everything held"),
     ("holdings", "every item: current ask vs break-even"),
@@ -68,6 +70,7 @@ def _telegram_only(mon: Monitor, arg: str) -> str:
 
 HANDLERS: dict[str, Callable[[Monitor, str], str]] = {
     "price": price_report,
+    "plan": lambda mon, arg: plan_report(mon),
     "sellable": lambda mon, arg: sellable_report(mon),
     "portfolio": lambda mon, arg: portfolio_report(mon),
     "holdings": lambda mon, arg: holdings_report(mon),

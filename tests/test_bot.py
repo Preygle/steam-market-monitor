@@ -125,6 +125,15 @@ def test_portfolio_says_when_only_free_drops_cover_the_cost(mon):
     assert "free drops" in out and "paid items" in out
 
 
+def test_plan_splits_what_sells_today_from_what_waits(mon):
+    mon.sweep()
+    out = answer(mon, "/plan")
+    assert out.index("SELLS AT TODAY'S PRICES") < out.index("NITRO") \
+        < out.index("WAITS FOR THE MARKET") < out.index("First Lap")
+    assert "odds 90d/180d/1y" in out
+    assert "ever sold below cost" in out
+
+
 def test_holdings_are_ordered_by_distance_to_break_even(mon):
     mon.sweep()
     out = answer(mon, "/holdings")
@@ -142,7 +151,7 @@ def test_command_addressed_to_the_bot_by_name(mon):
 
 def test_every_command_answers(mon):
     for cmd in ("/status", "/events", "/alerts", "/help", "/start",
-                "/sellable", "/portfolio", "/holdings", "/orders"):
+                "/sellable", "/portfolio", "/holdings", "/orders", "/plan"):
         assert answer(mon, cmd).strip(), cmd
 
 

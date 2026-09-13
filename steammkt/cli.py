@@ -23,7 +23,7 @@ from .monitor import Monitor
 from . import steamauth
 from .executor import DryRunExecutor, SteamExecutor
 from .ledger import Ledger
-from .reports import placed_summary, status_report
+from .reports import placed_summary, plan_report, status_report
 from .trader import Seller
 from .store import Store
 from .strategy import Strategy
@@ -156,17 +156,25 @@ def backfill_history(store: Store, client: SteamClient, names: list[str],
             if not quiet:
                 print(f"  [{i}/{len(names)}] {n[:50]:<50} no history")
             continue
+        # Steam gives hourly points for the last month: fold each day into one
+        # volume-weighted median, so a day isn't just its last hour.
+        days: dict[str, list[int]] = {}
+        for row in h:
+            try:
+                d = dt.datetime.strptime(row["ts"][:11], "%b %d %Y").date().isoformat()
+            except ValueError:
+                continue
+            w = max(int(row["volume"]), 1)
+            a = days.setdefault(d, [0, 0, 0])
+            a[0] += row["median_paise"] * w
+            a[1] += w
+            a[2] += int(row["volume"])
         with store.tx() as c:
-            for row in h:
-                try:
-                    d = dt.datetime.strptime(row["ts"][:11], "%b %d %Y").date()
-                except ValueError:
-                    continue
+            for d, (wsum, w, vol) in days.items():
                 c.execute(
                     "INSERT OR REPLACE INTO price_history"
                     "(market_hash_name,ts,median_paise,volume,source)"
-                    " VALUES (?,?,?,?,'pricehistory')",
-                    (n, d.isoformat(), row["median_paise"], row["volume"]))
+                    " VALUES (?,?,?,?,'pricehistory')", (n, d, wsum // w, vol))
         ok += 1
         if not quiet:
             print(f"  [{i}/{len(names)}] {n[:50]:<50} {len(h)} points")
@@ -318,8 +326,8 @@ def _sweep_due(store: Store, interval_s: int) -> bool:
     return not last or _age(last).total_seconds() >= interval_s
 
 
-def _history_due(store: Store) -> bool:
-    last = store.get_meta("history_at")
+def _daily_due(store: Store, key: str) -> bool:
+    last = store.get_meta(key)
     return not last or _age(last) > dt.timedelta(hours=24)
 
 
@@ -374,7 +382,7 @@ def cmd_ci(args):
             print("  hint:", res["hint"])
     names = [r["market_hash_name"] for r in store.q(
         "SELECT DISTINCT market_hash_name FROM holdings")]
-    if steam and names and (args.force_history or _history_due(store)):
+    if steam and names and (args.force_history or _daily_due(store, "history_at")):
         store.set_meta("history_at", dt.datetime.now().isoformat(timespec="seconds"))
         got = backfill_history(store, mon.client, names, quiet=True)
         print(f"price history: {got} of {len(names)} items")
@@ -403,6 +411,10 @@ def cmd_ci(args):
         print(f"sell ({mode}): {len(placed)} new, {len(moved)} repriced")
         if placed or moved:
             bot.reply(placed_summary(placed, moved, mode))
+    # The full per-item plan, once a day.
+    if plans and _daily_due(store, "plan_sent_at"):
+        store.set_meta("plan_sent_at", dt.datetime.now().isoformat(timespec="seconds"))
+        bot.reply(plan_report(bot_mon))
 
     if args.ping:
         bot.reply("Running in GitHub Actions.\n\n" + status_report(bot_mon))

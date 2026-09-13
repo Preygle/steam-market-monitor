@@ -34,6 +34,7 @@ from .alerts import Alert, AlertRouter, steam_item_url
 from .client import SteamClient
 from .fees import WalletConfig, net_from_buyer_price
 from .events import EventCalendar
+from .predict import Forecast, build_forecast, daily_series
 from .store import Store
 from .strategy import MarketSnapshot, SellPlan, Strategy, evaluate_portfolio
 
@@ -95,6 +96,15 @@ class Monitor:
             history=hist,
         )
 
+    def forecast_for(self, name: str, p0: Optional[int],
+                     item_type: Optional[str] = None) -> Optional[Forecast]:
+        """Trend, volatility and explained spikes from the stored series."""
+        rows = self.store.q(
+            "SELECT ts, median_paise, volume, source FROM price_history"
+            " WHERE market_hash_name=? ORDER BY ts", (name,))
+        return build_forecast(name, daily_series(rows), p0, self.calendar,
+                              scope=item_type)
+
     def clears_floor(self, snap: MarketSnapshot, plan: SellPlan) -> Optional[bool]:
         """Could this item be listed at the cheapest current ask and still
         net its cost?
@@ -135,6 +145,8 @@ class Monitor:
                 snap, h["cost"] or 0, qty=h["qty"],
                 item_type=h["item_type"] or "other",
                 month_bias=month_bias,
+                forecast=self.forecast_for(
+                    name, snap.lowest_paise or snap.fair_value_paise(), h["item_type"]),
             )
             # Hard safety gate. A bug here must crash, not lose money.
             plan.validate(self.cfg)
