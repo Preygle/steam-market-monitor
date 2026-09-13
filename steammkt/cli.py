@@ -20,6 +20,7 @@ from .events import EventCalendar
 from .fees import WalletConfig, fee_amount
 from .inventory import import_inventory
 from .monitor import Monitor
+from . import steamauth
 from .reports import status_report
 from .store import Store
 from .strategy import Strategy
@@ -61,7 +62,8 @@ def apply_env(cfg: dict, env) -> dict:
 
 def load_cfg() -> dict:
     path = CFG_PATH if CFG_PATH.exists() else EXAMPLE_PATH
-    if path == EXAMPLE_PATH and not os.environ.get("STEAM_ID64"):
+    if path == EXAMPLE_PATH and not (os.environ.get("STEAM_ID64")
+                                     or os.environ.get("TELEGRAM_BOT_TOKEN")):
         sys.exit(f"missing {CFG_PATH}. Copy config/config.example.yaml to it "
                  f"and fill it in (in CI: set the repository secrets).")
     return apply_env(yaml.safe_load(path.read_text(encoding="utf-8")), os.environ)
@@ -139,6 +141,34 @@ def build_bot(cfg: dict) -> TelegramBot:
     return TelegramBot(tg["bot_token"], tg["chat_id"], mon)
 
 
+def backfill_history(store: Store, client: SteamClient, names: list[str],
+                     quiet: bool = False) -> int:
+    """Pull Steam's full daily price series for each name. Needs a logged-in
+    session cookie. Returns how many items got history."""
+    ok = 0
+    for i, n in enumerate(names, 1):
+        h = client.price_history(n)
+        if not h:
+            if not quiet:
+                print(f"  [{i}/{len(names)}] {n[:50]:<50} no history")
+            continue
+        with store.tx() as c:
+            for row in h:
+                try:
+                    d = dt.datetime.strptime(row["ts"][:11], "%b %d %Y").date()
+                except ValueError:
+                    continue
+                c.execute(
+                    "INSERT OR REPLACE INTO price_history"
+                    "(market_hash_name,ts,median_paise,volume,source)"
+                    " VALUES (?,?,?,?,'pricehistory')",
+                    (n, d.isoformat(), row["median_paise"], row["volume"]))
+        ok += 1
+        if not quiet:
+            print(f"  [{i}/{len(names)}] {n[:50]:<50} {len(h)} points")
+    return ok
+
+
 # ---------------------------------------------------------------- commands
 def cmd_fees(args):
     cfg = wallet_from(load_cfg() if CFG_PATH.exists() else {})
@@ -192,25 +222,7 @@ def cmd_history(args):
     if not cfg["steam"].get("session_cookie"):
         print("WARNING: no session_cookie set. /market/pricehistory/ needs a "
               "logged-in session; falling back to snapshot accumulation only.\n")
-    ok = 0
-    for i, n in enumerate(names, 1):
-        h = client.price_history(n)
-        if not h:
-            print(f"  [{i}/{len(names)}] {n[:50]:<50} no history")
-            continue
-        with store.tx() as c:
-            for row in h:
-                try:
-                    d = dt.datetime.strptime(row["ts"][:11], "%b %d %Y").date()
-                except ValueError:
-                    continue
-                c.execute(
-                    "INSERT OR REPLACE INTO price_history"
-                    "(market_hash_name,ts,median_paise,volume,source)"
-                    " VALUES (?,?,?,?,'pricehistory')",
-                    (n, d.isoformat(), row["median_paise"], row["volume"]))
-        ok += 1
-        print(f"  [{i}/{len(names)}] {n[:50]:<50} {len(h)} points")
+    ok = backfill_history(store, client, names)
     print(f"\n{ok}/{len(names)} items have full history")
 
 
@@ -302,6 +314,15 @@ def _sweep_due(store: Store, interval_s: int) -> bool:
     return not last or _age(last).total_seconds() >= interval_s
 
 
+def _history_due(store: Store) -> bool:
+    last = store.get_meta("history_at")
+    return not last or _age(last) > dt.timedelta(hours=24)
+
+
+def _real_steamid(s) -> bool:
+    return bool(s) and str(s).isdigit()     # not the example's 7656119XXXX...
+
+
 def cmd_ci(args):
     """One scheduled GitHub Actions run: answer Telegram, import and sweep
     when due, keep answering until the listen window closes, then exit.
@@ -315,16 +336,30 @@ def cmd_ci(args):
         sys.exit("TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are not set")
     cfg["alerts"].update(console=False, windows_toast=False)
     store = Store()
+
+    # The Steam login from /login, sealed in the cached state with STATE_KEY.
+    vault = steamauth.open_vault(store, os.environ.get("STATE_KEY", ""))
+    steam = steamauth.use_login(store, vault)
+    if steam:
+        cfg["steam"]["session_cookie"] = steam.cookie
+        if not _real_steamid(cfg["steam"].get("steamid64")):
+            cfg["steam"]["steamid64"] = str(steam.steamid)
+    print("steam login:", "active" if steam else "none")
+
     mon = build_monitor(cfg, store, build_router(cfg, store))
     mon.quiet = True
     bot_mon = build_monitor(cfg, store, AlertRouter([]))
     bot_mon.quote_cache_s = BOT_QUOTE_CACHE_S
-    bot = TelegramBot(tg["bot_token"], tg["chat_id"], bot_mon)
+    bot = TelegramBot(tg["bot_token"], tg["chat_id"], bot_mon, vault=vault)
     bot.register_commands()
 
     handled = bot.listen(0)                 # whatever is already waiting
 
-    if args.force_import or _import_due(store):
+    if not _real_steamid(cfg["steam"].get("steamid64")):
+        print("inventory: no SteamID yet -- set STEAM_ID64 or send /login")
+    elif not (cfg.get("cost_basis") or {}).get("pass_price_paise"):
+        print("inventory: cost basis secrets not set -- skipping")
+    elif args.force_import or _import_due(store):
         store.set_meta("inventory_attempt",
                        dt.datetime.now().isoformat(timespec="seconds"))
         res = import_inventory(store, build_client(cfg, store),
@@ -333,6 +368,12 @@ def cmd_ci(args):
               or f"{res['imported']} imported, {res.get('removed', 0)} gone")
         if res.get("hint"):
             print("  hint:", res["hint"])
+    names = [r["market_hash_name"] for r in store.q(
+        "SELECT DISTINCT market_hash_name FROM holdings")]
+    if steam and names and (args.force_history or _history_due(store)):
+        store.set_meta("history_at", dt.datetime.now().isoformat(timespec="seconds"))
+        got = backfill_history(store, mon.client, names, quiet=True)
+        print(f"price history: {got} of {len(names)} items")
     if args.force_sweep or _sweep_due(store, mon.interval_s):
         mon.sweep()
     if args.ping:
@@ -394,6 +435,7 @@ def main():
                    help="answer Telegram for this long before exiting")
     c.add_argument("--force-sweep", action="store_true")
     c.add_argument("--force-import", action="store_true")
+    c.add_argument("--force-history", action="store_true")
     c.add_argument("--ping", action="store_true",
                    help="send a status message to Telegram")
     c.set_defaults(fn=cmd_ci)

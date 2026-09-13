@@ -364,6 +364,8 @@ def status_report(mon: Monitor, now: Optional[dt.datetime] = None) -> str:
          f"Last sweep   {last or 'never'}",
          f"Last quote   {q['t'] or 'never'} ({q['n']} stored)",
          f"Alerts today {sent}",
+         "Steam login  " + ("active (price history on)" if mon.store.get_meta("steam_login")
+                            else "none -- /login to add one"),
          f"Sweep every  {mon.interval_s // 60} min"]
     if last:
         age = now - dt.datetime.fromisoformat(last)

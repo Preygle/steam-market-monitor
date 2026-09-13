@@ -1,2 +1,4 @@
 requests>=2.31
 PyYAML>=6.0
+cryptography>=42     # seals the Steam login at rest (steamauth.Vault)
+segno>=1.6           # renders the /login QR code

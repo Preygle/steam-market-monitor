@@ -7,10 +7,14 @@
 #      break-even / spike alerts to Telegram
 #   4. keeps answering commands for ~8 minutes, then saves state and exits
 #
-# Repository secrets it needs (Settings > Secrets and variables > Actions):
-#   TELEGRAM_BOT_TOKEN  TELEGRAM_CHAT_ID  STEAM_ID64
-#   PASS_PRICE_PAISE    PASSES_BOUGHT     CREDITS_EARNED
-# Until they are set, every run just logs a warning and exits green.
+# Repository secrets (Settings > Secrets and variables > Actions):
+#   TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID  required; until both are set every
+#                                         run just logs a warning, exits green
+#   PASS_PRICE_PAISE, PASSES_BOUGHT,      your Armory cost basis
+#   CREDITS_EARNED
+#   STATE_KEY    any long random string. Encrypts the Steam login (/login)
+#                in the cached state; without it /login is refused.
+#   STEAM_ID64   optional once you've done /login -- it comes from the login
 #
 # This repo is public, so these logs are too. The job prints counts only --
 # never item names, prices or P/L. Those go to Telegram.
@@ -52,7 +56,7 @@ jobs:
     timeout-minutes: 25
     env:
       # `if:` can't read secrets directly; it can read this.
-      CONFIGURED: ${{ secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != '' && secrets.STEAM_ID64 != '' }}
+      CONFIGURED: ${{ secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != '' }}
     steps:
       - name: Waiting for repository secrets
         if: env.CONFIGURED != 'true'
@@ -92,6 +96,7 @@ jobs:
           PASS_PRICE_PAISE: ${{ secrets.PASS_PRICE_PAISE }}
           PASSES_BOUGHT: ${{ secrets.PASSES_BOUGHT }}
           CREDITS_EARNED: ${{ secrets.CREDITS_EARNED }}
+          STATE_KEY: ${{ secrets.STATE_KEY }}
           # Passed via env, never interpolated into the script body.
           PING: ${{ inputs.ping }}
           FORCE_SWEEP: ${{ inputs.force_sweep }}
