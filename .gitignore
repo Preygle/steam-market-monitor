@@ -1,8 +1,16 @@
 # --- personal data: never commit -------------------------------------
-config/config.yaml          # SteamID, cost basis, session cookie
-config/watchlist.yaml       # your specific holdings
-scripts/snapshot_*.py       # inventory snapshots with real prices/costs
-data/                       # local SQLite db, cached HTTP responses
+# Comments must sit on their own line: git reads a trailing "# ..." as part
+# of the pattern, which silently stops the pattern from matching anything.
+
+# SteamID, cost basis, session cookie
+config/config.yaml
+# your specific holdings
+config/watchlist.yaml
+# inventory snapshots with real prices/costs
+scripts/snapshot_*.py
+# local SQLite db, cached HTTP responses
+data/*
+!data/.gitkeep
 *.db
 
 # --- python ----------------------------------------------------------

@@ -38,6 +38,7 @@ class Alert:
     body: str
     url: str = ""
     price_to_type: str = ""
+    market_hash_name: str = ""
 
     def as_text(self) -> str:
         L = [f"[{self.kind.upper()}] {self.title}", self.body]
@@ -111,15 +112,23 @@ class TelegramChannel(Channel):
 
 
 class AlertRouter:
+    """Fans an alert out to every channel.
+
+    `dedupe_key` suppresses repeats. Keys are checked against the alerts
+    table as well as memory, so restarting the monitor mid-day does not
+    re-send alerts it already sent that day.
+    """
+
     def __init__(self, channels: list[Channel], store=None):
         self.channels = channels
         self.store = store
         self._seen: set[str] = set()
 
-    def send(self, alert: Alert, dedupe_key: Optional[str] = None) -> None:
+    def send(self, alert: Alert, dedupe_key: Optional[str] = None) -> bool:
+        """Returns False if the alert was suppressed as a duplicate."""
         if dedupe_key:
-            if dedupe_key in self._seen:
-                return
+            if dedupe_key in self._seen or self._sent_before(dedupe_key):
+                return False
             self._seen.add(dedupe_key)
         for ch in self.channels:
             ch.send(alert)
@@ -127,10 +136,18 @@ class AlertRouter:
             import datetime as dt
             with self.store.tx() as c:
                 c.execute(
-                    "INSERT INTO alerts(ts,kind,market_hash_name,message,payload)"
-                    " VALUES (?,?,?,?,?)",
+                    "INSERT INTO alerts(ts,kind,market_hash_name,message,"
+                    "payload,dedupe_key) VALUES (?,?,?,?,?,?)",
                     (dt.datetime.now().isoformat(timespec="seconds"),
-                     alert.kind, alert.title, alert.body,
-                     json.dumps({"url": alert.url,
-                                 "price": alert.price_to_type})),
+                     alert.kind, alert.market_hash_name, alert.body,
+                     json.dumps({"title": alert.title, "url": alert.url,
+                                 "price": alert.price_to_type}),
+                     dedupe_key),
                 )
+        return True
+
+    def _sent_before(self, dedupe_key: str) -> bool:
+        if not self.store:
+            return False
+        return self.store.one("SELECT 1 FROM alerts WHERE dedupe_key=?",
+                              (dedupe_key,)) is not None

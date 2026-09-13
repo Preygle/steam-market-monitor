@@ -64,6 +64,8 @@ CREATE TABLE IF NOT EXISTS plan (
     floor_list_paise     INTEGER,
     confidence       REAL,
     rationale        TEXT,
+    action           TEXT,     -- list_now | list_patient | hold | unsellable
+    clears_floor     INTEGER,  -- 1 if the cheapest ask clears break-even
     updated_at       TEXT
 );
 
@@ -74,7 +76,8 @@ CREATE TABLE IF NOT EXISTS alerts (
     market_hash_name TEXT,
     message     TEXT,
     payload     TEXT,
-    acted       INTEGER DEFAULT 0
+    acted       INTEGER DEFAULT 0,
+    dedupe_key  TEXT
 );
 
 CREATE TABLE IF NOT EXISTS sales (
@@ -98,6 +101,14 @@ CREATE INDEX IF NOT EXISTS idx_hist_name ON price_history(market_hash_name);
 CREATE INDEX IF NOT EXISTS idx_quotes_name ON quotes(market_hash_name);
 """
 
+# Columns added after the first release. CREATE TABLE IF NOT EXISTS leaves an
+# existing table alone, so databases created earlier get them here instead.
+MIGRATIONS = [
+    ("plan", "action", "TEXT"),
+    ("plan", "clears_floor", "INTEGER"),
+    ("alerts", "dedupe_key", "TEXT"),
+]
+
 
 class Store:
     def __init__(self, path: str | Path = "data/market.db"):
@@ -106,7 +117,14 @@ class Store:
         self.conn = sqlite3.connect(self.path, timeout=30)
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
+        self._migrate()
         self.conn.commit()
+
+    def _migrate(self) -> None:
+        for table, col, decl in MIGRATIONS:
+            have = {r["name"] for r in self.conn.execute(f"PRAGMA table_info({table})")}
+            if col not in have:
+                self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
 
     @contextmanager
     def tx(self):
