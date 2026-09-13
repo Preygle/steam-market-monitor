@@ -21,7 +21,10 @@ from .fees import WalletConfig, fee_amount
 from .inventory import import_inventory
 from .monitor import Monitor
 from . import steamauth
-from .reports import status_report
+from .executor import DryRunExecutor, SteamExecutor
+from .ledger import Ledger
+from .reports import placed_summary, status_report
+from .trader import Seller
 from .store import Store
 from .strategy import Strategy
 
@@ -38,6 +41,7 @@ ENV_OVERRIDES = {
     "CREDITS_EARNED": (("cost_basis", "credits_earned"), int),
     "TELEGRAM_BOT_TOKEN": (("alerts", "telegram", "bot_token"), str),
     "TELEGRAM_CHAT_ID": (("alerts", "telegram", "chat_id"), str),
+    "SELL_MODE": (("sell", "mode"), str),
 }
 
 
@@ -374,8 +378,32 @@ def cmd_ci(args):
         store.set_meta("history_at", dt.datetime.now().isoformat(timespec="seconds"))
         got = backfill_history(store, mon.client, names, quiet=True)
         print(f"price history: {got} of {len(names)} items")
+    plans = []
     if args.force_sweep or _sweep_due(store, mon.interval_s):
-        mon.sweep()
+        plans = mon.sweep()
+
+    # Sell: dry run unless SELL_MODE=live, and live needs the Steam login.
+    sell = cfg.get("sell") or {}
+    mode = sell.get("mode", "dry_run")
+    if mode == "live" and not steam:
+        print("sell: SELL_MODE=live needs a Steam login (/login) -- dry run")
+        mode = "dry_run"
+    executor = (SteamExecutor(mon.client.session, str(cfg["steam"]["steamid64"]),
+                              cfg["steam"].get("currency", 24), mon.client.rl)
+                if mode == "live" else DryRunExecutor())
+    seller = Seller(store, Ledger(store), executor, mon.cfg,
+                    max_per_run=int(sell.get("max_per_run", 10)),
+                    rest_at_floor=bool(sell.get("rest_at_floor", True)),
+                    allow_subsidy=bool(sell.get("allow_subsidy", False)))
+    if mode == "live":
+        print("orders reconciled:", seller.reconcile())
+    if plans:
+        moved = seller.reprice(plans)
+        placed = seller.run(plans)
+        print(f"sell ({mode}): {len(placed)} new, {len(moved)} repriced")
+        if placed or moved:
+            bot.reply(placed_summary(placed, moved, mode))
+
     if args.ping:
         bot.reply("Running in GitHub Actions.\n\n" + status_report(bot_mon))
 

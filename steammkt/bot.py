@@ -25,8 +25,8 @@ from typing import Callable, Optional
 from . import steamauth
 from .monitor import Monitor
 from .reports import (alerts_report, events_report, fees_report,
-                      holdings_report, portfolio_report, price_report,
-                      sellable_report, status_report)
+                      holdings_report, orders_report, portfolio_report,
+                      price_report, sellable_report, status_report)
 
 TELEGRAM_LIMIT = 4096
 # /price is a live question: re-fetch a quote older than this rather than
@@ -42,6 +42,7 @@ COMMANDS = [
     ("sellable", "items that clear break-even right now"),
     ("portfolio", "cost, current value and P/L of everything held"),
     ("holdings", "every item: current ask vs break-even"),
+    ("orders", "sell orders: planned, awaiting confirmation, listed, sold"),
     ("alerts", "recent alerts. /alerts 20"),
     ("fees", "what you receive for a price. /fees 90"),
     ("events", "upcoming and recent market events"),
@@ -70,6 +71,7 @@ HANDLERS: dict[str, Callable[[Monitor, str], str]] = {
     "sellable": lambda mon, arg: sellable_report(mon),
     "portfolio": lambda mon, arg: portfolio_report(mon),
     "holdings": lambda mon, arg: holdings_report(mon),
+    "orders": lambda mon, arg: orders_report(mon),
     "alerts": alerts_report,
     "fees": lambda mon, arg: fees_report(mon.cfg, arg),
     "events": lambda mon, arg: events_report(mon.calendar),

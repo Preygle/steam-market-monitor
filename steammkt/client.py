@@ -115,6 +115,11 @@ class SteamClient:
             self._s.cookies.set("steamLoginSecure", self.session_cookie,
                                 domain="steamcommunity.com")
 
+    @property
+    def session(self) -> requests.Session:
+        """The HTTP session, cookies included -- for the live executor."""
+        return self._s
+
     # ---- core fetch -------------------------------------------------
     def _get(self, url: str, *, cache_s: float = 0.0) -> Optional[Any]:
         """Parsed JSON, or None. After a None, `last_error` says why --

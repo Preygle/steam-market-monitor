@@ -308,6 +308,65 @@ def holdings_report(mon: Monitor) -> str:
     return "\n".join(L)
 
 
+ORDER_LABELS = [
+    ("planned", "Planned (dry run -- nothing sent to Steam)"),
+    ("confirm_pending", "Waiting for you: Steam app -> Confirmations"),
+    ("listed", "Listed on Steam"),
+    ("sold", "Sold"),
+    ("failed", "Failed"),
+]
+
+
+def orders_report(mon: Monitor) -> str:
+    """Sell orders by state, identical ones grouped, best profit first."""
+    rows = mon.store.q("SELECT * FROM orders WHERE side='sell' ORDER BY id")
+    if not rows:
+        return ("No sell orders yet. The next price sweep plans them "
+                "(dry run until SELL_MODE=live).")
+    L = []
+    for status, label in ORDER_LABELS:
+        group = [r for r in rows if r["status"] == status]
+        if not group:
+            continue
+        L.append(f"{label}: {len(group)}")
+        agg: dict[tuple, list] = {}
+        for r in group:
+            a = agg.setdefault((r["market_hash_name"], r["price_paise"]),
+                               [0, r["net_paise"], r["cost_basis_paise"]])
+            a[0] += 1
+        for (name, price), (n, net, cost) in sorted(
+                agg.items(), key=lambda kv: kv[1][2] - kv[1][1]):
+            L.append(f"  {short(name)} x{n}  {_num(price)} -> {_num(net)}"
+                     f" ({(net - cost)/100:+,.2f} each)")
+        L.append("")
+    sold = [r for r in rows if r["status"] == "sold"]
+    pl = sum(r["net_paise"] - r["cost_basis_paise"] for r in sold)
+    L.append(f"Realised P/L: {pl/100:+,.2f} on {len(sold)} sold")
+    return "\n".join(L)
+
+
+def placed_summary(placed: list[dict], moved: list[dict], mode: str) -> str:
+    """The Telegram note after a run places or reprices orders."""
+    if mode == "live":
+        head = ("Listed on Steam. Approve them in the Steam app: "
+                "Steam Guard -> Confirmations -> select all.")
+    else:
+        head = "Dry run -- nothing sent to Steam. With SELL_MODE=live these get listed:"
+    L = [head, ""]
+    agg: dict[tuple, list] = {}
+    for d in placed:
+        a = agg.setdefault((d["name"], d["price"], d["ok"], d["note"]),
+                           [0, d["net"], d["cost"]])
+        a[0] += 1
+    for (name, price, ok, note), (n, net, cost) in agg.items():
+        line = f"{short(name)} x{n}: {rs(price)} -> you get {rs(net)} ({(net - cost)/100:+,.2f} each)"
+        L.append(line if ok else f"{line}  FAILED: {note}")
+    if moved:
+        L += ["", f"{len(moved)} order(s) repriced upward."]
+    L += ["", "/orders shows everything."]
+    return "\n".join(L)
+
+
 def alerts_report(mon: Monitor, arg: str = "") -> str:
     n = int(arg) if arg.isdigit() else 10
     rows = mon.store.q("SELECT ts, kind, market_hash_name, payload FROM alerts"

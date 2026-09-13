@@ -142,7 +142,7 @@ def test_command_addressed_to_the_bot_by_name(mon):
 
 def test_every_command_answers(mon):
     for cmd in ("/status", "/events", "/alerts", "/help", "/start",
-                "/sellable", "/portfolio", "/holdings"):
+                "/sellable", "/portfolio", "/holdings", "/orders"):
         assert answer(mon, cmd).strip(), cmd
 
 

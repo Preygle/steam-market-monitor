@@ -29,6 +29,21 @@ strategy:
   spike_threshold: 0.15             # >15% over fair value counts as a spike
   min_volume: 1                     # below this, treat as illiquid
 
+sell:
+  # dry_run: plan listings and report them to Telegram (default).
+  # live:    list on Steam with the /login session. Each listing still waits
+  #          for your OK in the Steam app (Steam Guard -> Confirmations).
+  # In CI this comes from the SELL_MODE repository variable.
+  mode: dry_run
+  max_per_run: 10                   # new listings per run, at most
+  rest_at_floor: true               # underwater items: list AT break-even and wait
+  allow_subsidy: false              # let banked profit cover a below-cost sale
+
+buy:                                # scaffold only; not wired into CI yet
+  enabled: false
+  budget_paise: 0
+  discount: 0.20
+
 monitor:
   interval_seconds: 3600
   quote_cache_seconds: 1800

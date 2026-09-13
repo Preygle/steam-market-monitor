@@ -91,6 +91,22 @@ CREATE TABLE IF NOT EXISTS sales (
     status      TEXT      -- listed | sold | cancelled
 );
 
+CREATE TABLE IF NOT EXISTS orders (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at       TEXT,
+    updated_at       TEXT,
+    side             TEXT,     -- sell | buy
+    market_hash_name TEXT,
+    asset_id         TEXT,
+    price_paise      INTEGER,  -- buyer-facing price (sell) / max price (buy)
+    net_paise        INTEGER,  -- what we receive (sell): what sellitem is sent
+    cost_basis_paise INTEGER,
+    status           TEXT,     -- planned | confirm_pending | listed | sold | cancelled | failed
+    listing_id       TEXT,
+    mode             TEXT,     -- dry_run | live
+    note             TEXT
+);
+
 CREATE TABLE IF NOT EXISTS meta (
     key         TEXT PRIMARY KEY,
     value       TEXT

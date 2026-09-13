@@ -107,11 +107,12 @@ class Monitor:
         return (snap.volume_24h >= self.strategy.min_volume
                 and snap.lowest_paise >= plan.floor_list_paise)
 
-    def sweep(self) -> None:
+    def sweep(self) -> list[SellPlan]:
+        """Refresh every held item and return the validated plans."""
         hold = self.holdings()
         if not hold:
             print("no holdings loaded -- run `import-inventory` first")
-            return
+            return []
 
         if not self.quiet:
             print(f"\n[{dt.datetime.now():%Y-%m-%d %H:%M}] sweeping {len(hold)} distinct items")
@@ -161,6 +162,7 @@ class Monitor:
                   f"underwater, {res.illiquid_count} held")
         else:
             print("\n" + res.report())
+        return plans
 
     def _alert(self, plan: SellPlan, snap: MarketSnapshot,
                was_clear: Optional[bool], clears: Optional[bool]) -> None:

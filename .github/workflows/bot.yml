@@ -97,6 +97,8 @@ jobs:
           PASSES_BOUGHT: ${{ secrets.PASSES_BOUGHT }}
           CREDITS_EARNED: ${{ secrets.CREDITS_EARNED }}
           STATE_KEY: ${{ secrets.STATE_KEY }}
+          # Repository VARIABLE (not a secret): dry_run (default) or live.
+          SELL_MODE: ${{ vars.SELL_MODE }}
           # Passed via env, never interpolated into the script body.
           PING: ${{ inputs.ping }}
           FORCE_SWEEP: ${{ inputs.force_sweep }}
