@@ -1,6 +1,7 @@
 """The GitHub Actions path: config from secrets, a bounded listen window,
 an inventory refresh that notices sold items, and logs that don't leak."""
 import datetime as dt
+import json
 
 import pytest
 from fakes import FakeApi, FakeClient, hold
@@ -58,6 +59,20 @@ def update(chat_id, text, uid):
 def mon(tmp_path):
     return Monitor(Store(tmp_path / "m.db"), FakeClient(), Strategy(CFG),
                    AlertRouter([]), EventCalendar("config/events.yaml"), CFG)
+
+
+def test_commands_fill_the_telegram_menu(mon):
+    """The Menu button / "/" list in the chat is what setMyCommands fills."""
+    api = FakeApi()
+    TelegramBot("t", 42, mon, api=api).register_commands()
+    menus = [p for m, p in api.calls if m == "setMyCommands"]
+    assert {json.loads(p["scope"])["type"] for p in menus} == \
+        {"default", "all_private_chats"}
+    names = {c["command"] for c in json.loads(menus[0]["commands"])}
+    assert {"price", "sellable", "portfolio", "holdings", "login"} <= names
+    button = next(p for m, p in api.calls if m == "setChatMenuButton")
+    assert button["chat_id"] == "42"
+    assert json.loads(button["menu_button"]) == {"type": "commands"}
 
 
 def test_listen_answers_waiting_messages_then_confirms_them(mon):

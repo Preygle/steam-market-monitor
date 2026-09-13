@@ -56,6 +56,7 @@ def help_text() -> str:
     L = ["Commands:"]
     L += [f"/{c} - {d}" for c, d in COMMANDS]
     L += ["", "Or just send an item name (e.g. nitro) to get its price.",
+          "The Menu button beside the message box lists these too.",
           "Read-only: nothing here lists or sells anything."]
     return "\n".join(L)
 
@@ -246,10 +247,18 @@ class TelegramBot:
 
     # ---- polling ----------------------------------------------------------
     def register_commands(self) -> None:
-        """Show the commands in Telegram's "/" menu."""
+        """Fill Telegram's command menu -- the Menu button beside the message
+        box, and the list that pops up on "/".
+
+        Registered for the default scope and for private chats, and this
+        chat's menu button is pinned to "commands", so a client that cached
+        an empty menu shows it after a restart."""
+        commands = json.dumps([{"command": c, "description": d} for c, d in COMMANDS])
         try:
-            self.api("setMyCommands", commands=json.dumps(
-                [{"command": c, "description": d} for c, d in COMMANDS]))
+            for scope in ({"type": "default"}, {"type": "all_private_chats"}):
+                self.api("setMyCommands", commands=commands, scope=json.dumps(scope))
+            self.api("setChatMenuButton", chat_id=self.chat_id,
+                     menu_button=json.dumps({"type": "commands"}))
         except Exception as e:
             print(f"  [bot] could not register the command menu: {e}")
 
