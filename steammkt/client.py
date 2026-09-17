@@ -193,6 +193,33 @@ class SteamClient:
             "volume": int(str(d.get("volume", "0")).replace(",", "") or 0),
         }
 
+    def listing_page_price(self, name: str, cache_s: float = 900) -> Optional[int]:
+        """Lowest ask scraped from the item's ordinary market page.
+
+        The JSON endpoints are throttled per IP and refuse datacenter
+        addresses outright; the HTML page is served by a different path and
+        may answer where priceoverview will not."""
+        url = (f"{BASE}/market/listings/{APPID_CS2}/{quote(name)}"
+               f"?l=english&currency={self.currency}")
+        self.last_error = None
+        self.rl.wait()
+        try:
+            r = self._s.get(url, timeout=self.timeout)
+        except requests.RequestException:
+            self.last_error = "network"
+            return None
+        if r.status_code == 429:
+            self.last_error = "rate_limited"
+            return None
+        if not r.ok:
+            self.last_error = f"http_{r.status_code}"
+            return None
+        m = re.search(r'Starting at:[^<]*<[^>]*>([^<]+)<', r.text)             or re.search(r'"lowest_price"\s*:\s*"([^"]+)"', r.text)
+        if not m:
+            self.last_error = "no_price_in_page"
+            return None
+        return parse_price_to_paise(m.group(1))
+
     def price_history(self, name: str, cache_s: float = 21600) -> Optional[list]:
         """Full daily series [(date, median, volume)]. REQUIRES login cookie.
 

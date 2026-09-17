@@ -419,9 +419,13 @@ def cmd_ci(args):
     if not names:
         # No holdings yet: check the market endpoints answer us at all, so the
         # log distinguishes "Steam blocks this runner" from "nothing to do".
-        probe = mon.client.price_overview("AK-47 | Redline (Field-Tested)", cache_s=0)
-        print("steam market probe:",
+        item = "AK-47 | Redline (Field-Tested)"
+        probe = mon.client.price_overview(item, cache_s=0)
+        print("steam probe priceoverview:",
               "ok" if probe else f"failed ({mon.client.last_error})")
+        page = mon.client.listing_page_price(item, cache_s=0)
+        print("steam probe listing page:",
+              "ok" if page else f"failed ({mon.client.last_error})")
     if steam and names and (args.force_history or _daily_due(store, "history_at")):
         store.set_meta("history_at", dt.datetime.now().isoformat(timespec="seconds"))
         got = backfill_history(store, mon.client, names, quiet=True)
