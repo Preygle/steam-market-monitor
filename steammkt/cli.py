@@ -230,6 +230,12 @@ def cmd_history(args):
     names = [r["market_hash_name"] for r in store.q(
         "SELECT DISTINCT market_hash_name FROM holdings")]
     if not names:
+        # No holdings yet: check the market endpoints answer us at all, so the
+        # log distinguishes "Steam blocks this runner" from "nothing to do".
+        probe = mon.client.price_overview("AK-47 | Redline (Field-Tested)", cache_s=0)
+        print("steam market probe:",
+              "ok" if probe else f"failed ({mon.client.last_error})")
+    if not names:
         sys.exit("no holdings -- run import-inventory first")
     if not cfg["steam"].get("session_cookie"):
         print("WARNING: no session_cookie set. /market/pricehistory/ needs a "
@@ -451,7 +457,7 @@ def cmd_ci(args):
         _say(bot, plan_report(bot_mon))
 
     if args.ping:
-        bot.reply("Running in GitHub Actions.\n\n" + status_report(bot_mon))
+        _say(bot, "Running in GitHub Actions.\n\n" + status_report(bot_mon))
 
     if args.selftest:
         _selftest(bot, bot_mon)

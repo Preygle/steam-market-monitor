@@ -222,7 +222,38 @@ class SteamClient:
         return self._get(url, cache_s=cache_s)
 
     def inventory(self, steamid64: str, count: int = 2000) -> list[dict]:
-        """Public inventory. Paginates via last_assetid."""
+        """Public inventory, the modern endpoint first, the legacy one as backup.
+
+        Steam throttles /inventory/ hard and per IP -- a home connection and a
+        GitHub runner both get 429s from the first request -- so when the
+        modern endpoint gives us nothing we try the older
+        /profiles/<id>/inventory/json/ route, which is throttled separately."""
+        items = self._inventory_modern(steamid64, count)
+        if items or self.last_error != "rate_limited":
+            return items
+        print("  [inv] rate limited: trying the legacy inventory endpoint")
+        return self._inventory_legacy(steamid64)
+
+    def _inventory_legacy(self, steamid64: str) -> list[dict]:
+        items, start = [], 0
+        while True:
+            url = (f"{BASE}/profiles/{steamid64}/inventory/json/{APPID_CS2}/2"
+                   f"?l=english&start={start}")
+            d = self._get(url, cache_s=0)
+            if not d or not d.get("success"):
+                break
+            descs = d.get("rgDescriptions") or {}
+            for a in (d.get("rgInventory") or {}).values():
+                desc = descs.get(f"{a.get('classid')}_{a.get('instanceid')}", {})
+                items.append({"assetid": a.get("id"), "classid": a.get("classid"),
+                              "instanceid": a.get("instanceid"), "_desc": desc})
+            if d.get("more") and d.get("more_start"):
+                start = d["more_start"]
+            else:
+                break
+        return items
+
+    def _inventory_modern(self, steamid64: str, count: int = 2000) -> list[dict]:
         items, start = [], None
         while True:
             url = (f"{BASE}/inventory/{steamid64}/{APPID_CS2}/2"
