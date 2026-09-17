@@ -214,7 +214,8 @@ class SteamClient:
         if not r.ok:
             self.last_error = f"http_{r.status_code}"
             return None
-        m = re.search(r'Starting at:[^<]*<[^>]*>([^<]+)<', r.text)             or re.search(r'"lowest_price"\s*:\s*"([^"]+)"', r.text)
+        m = (re.search(r'Starting at:[^<]*<[^>]*>([^<]+)<', r.text)
+             or re.search(r'"lowest_price"\s*:\s*"([^"]+)"', r.text))
         if not m:
             self.last_error = "no_price_in_page"
             return None
