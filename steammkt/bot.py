@@ -151,6 +151,7 @@ class TelegramBot:
         self.upload = upload or self._http_upload
         self.vault = vault                  # None: /login is refused
         self.auth = auth or steamauth
+        self.token_ok = True          # cleared on a 404: the token is wrong
         self.login: Optional[steamauth.QrSession] = None
         self.login_deadline = 0.0
         self.offset = 0
@@ -282,6 +283,12 @@ class TelegramBot:
         try:
             return self.poll_once(timeout)
         except urllib.error.HTTPError as e:
+            if e.code == 404:
+                # api.telegram.org answers 404 for a token it doesn't know.
+                self.token_ok = False
+                print("  [bot] 404: Telegram doesn't recognise this bot token "
+                      "-- check the TELEGRAM_BOT_TOKEN secret.")
+                return 0
             if e.code == 409:
                 print("  [bot] 409: another copy of this bot is polling "
                       "(a local `bot`/`monitor`, or an overlapping CI run).")
@@ -320,6 +327,8 @@ class TelegramBot:
             end = max(deadline, self.login_deadline) if self.login else deadline
             handled += self._poll(self._wait(end - time.monotonic()))
             self._poll_login()
+            if not self.token_ok:
+                break
             if not self.login and deadline - time.monotonic() < 1:
                 break
         self.confirm()
@@ -328,6 +337,6 @@ class TelegramBot:
     def poll_forever(self) -> None:
         self.register_commands()
         print("telegram bot listening -- send /help to it.")
-        while True:
+        while self.token_ok:
             self._poll(self._wait(50))
             self._poll_login()

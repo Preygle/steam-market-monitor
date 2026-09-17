@@ -335,6 +335,15 @@ def _real_steamid(s) -> bool:
     return bool(s) and str(s).isdigit()     # not the example's 7656119XXXX...
 
 
+def _say(bot, text: str) -> None:
+    """Telegram is best-effort: a dead token or an outage must not cost us
+    the sweep, the orders or the saved state."""
+    try:
+        bot.reply(text)
+    except Exception as e:
+        print(f"telegram: send failed ({type(e).__name__}: {e})")
+
+
 # Arguments the self-test passes to the commands that take one.
 SELFTEST_ARGS = {"price": "nitro", "fees": "90", "alerts": "5"}
 
@@ -349,7 +358,7 @@ def _selftest(bot, mon) -> None:
         text = answer(mon, f"/{name} {SELFTEST_ARGS.get(name, '')}".strip())
         if text.startswith(f"/{name} failed"):
             failed.append(name)
-        bot.reply(f"[test /{name}]\n{text}")
+        _say(bot, f"[test /{name}]\n{text}")
     print("selftest:", "all ok" if not failed else "FAILED: " + ", ".join(failed))
 
 
@@ -381,6 +390,13 @@ def cmd_ci(args):
     bot_mon = build_monitor(cfg, store, AlertRouter([]))
     bot_mon.quote_cache_s = BOT_QUOTE_CACHE_S
     bot = TelegramBot(tg["bot_token"], tg["chat_id"], bot_mon, vault=vault)
+    try:
+        print("telegram: bot @" + (bot.api("getMe").get("result") or {}).get(
+            "username", "?"))
+    except Exception as e:
+        # A wrong token 404s here; say so once, then get on with the sweep.
+        print(f"::warning::telegram: {e} -- check the TELEGRAM_BOT_TOKEN secret")
+        bot.token_ok = False
     bot.register_commands()
 
     handled = bot.listen(0)                 # whatever is already waiting
@@ -428,11 +444,11 @@ def cmd_ci(args):
         placed = seller.run(plans)
         print(f"sell ({mode}): {len(placed)} new, {len(moved)} repriced")
         if placed or moved:
-            bot.reply(placed_summary(placed, moved, mode))
+            _say(bot, placed_summary(placed, moved, mode))
     # The full per-item plan, once a day.
     if plans and _daily_due(store, "plan_sent_at"):
         store.set_meta("plan_sent_at", dt.datetime.now().isoformat(timespec="seconds"))
-        bot.reply(plan_report(bot_mon))
+        _say(bot, plan_report(bot_mon))
 
     if args.ping:
         bot.reply("Running in GitHub Actions.\n\n" + status_report(bot_mon))
