@@ -423,9 +423,20 @@ def cmd_ci(args):
         probe = mon.client.price_overview(item, cache_s=0)
         print("steam probe priceoverview:",
               "ok" if probe else f"failed ({mon.client.last_error})")
-        page = mon.client.listing_page_price(item, cache_s=0)
-        print("steam probe listing page:",
-              "ok" if page else f"failed ({mon.client.last_error})")
+        page = mon.client.page_data(item)
+        if not page:
+            print("steam probe listing page: failed "
+                  f"({mon.client.last_error})")
+        else:
+            hist = page["history"]
+            print(f"steam probe listing page: ok, nameid={page['item_nameid']}, "
+                  f"history points={len(hist)}, last={hist[-1] if hist else None}")
+            if page["item_nameid"]:
+                book = mon.client.order_book(str(page["item_nameid"]), cache_s=0)
+                low = (book or {}).get("lowest_sell_order")
+                print("steam probe order book:",
+                      f"ok, lowest sell order={low}" if book
+                      else f"failed ({mon.client.last_error})")
     if steam and names and (args.force_history or _daily_due(store, "history_at")):
         store.set_meta("history_at", dt.datetime.now().isoformat(timespec="seconds"))
         got = backfill_history(store, mon.client, names, quiet=True)

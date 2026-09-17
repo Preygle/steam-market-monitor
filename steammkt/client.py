@@ -33,6 +33,10 @@ CURRENCY_INR = 24
 BASE = "https://steamcommunity.com"
 
 _PRICE_RE = re.compile(r"[\d.,]+")
+# The page embeds the item's internal id (for the order book) and its
+# price history, even for a logged-out visitor.
+_NAMEID_RE = re.compile(r"Market_LoadOrderSpread\s*\(\s*(\d+)")
+_LINE1_RE = re.compile(r"var\s+line1\s*=\s*(\[.*?\])\s*;", re.S)
 
 
 def parse_price_to_paise(s: Optional[str]) -> Optional[int]:
@@ -192,6 +196,48 @@ class SteamClient:
             "median_paise": parse_price_to_paise(d.get("median_price")),
             "volume": int(str(d.get("volume", "0")).replace(",", "") or 0),
         }
+
+    def _get_text(self, url: str) -> Optional[str]:
+        """HTML, with the same pacing and 429 handling as _get."""
+        self.last_error = None
+        self.rl.wait()
+        try:
+            r = self._s.get(url, timeout=self.timeout)
+        except requests.RequestException:
+            self.last_error = "network"
+            return None
+        if r.status_code == 429:
+            self.last_error = "rate_limited"
+            return None
+        if not r.ok:
+            self.last_error = f"http_{r.status_code}"
+            return None
+        return r.text
+
+    def page_data(self, name: str) -> Optional[dict]:
+        """What the item's market page carries: the internal item_nameid the
+        order book needs, and the price history the page embeds.
+
+        Steam's JSON endpoints refuse datacenter IPs outright, but this page
+        is served -- so this is the way in from CI."""
+        url = (f"{BASE}/market/listings/{APPID_CS2}/{quote(name)}"
+               f"?l=english&currency={self.currency}")
+        html = self._get_text(url)
+        if not html:
+            return None
+        nameid = _NAMEID_RE.search(html)
+        line1 = _LINE1_RE.search(html)
+        history = []
+        if line1:
+            try:
+                for row in json.loads(line1.group(1)):
+                    history.append({"ts": row[0],
+                                    "median_paise": int(round(float(row[1]) * 100)),
+                                    "volume": int(row[2])})
+            except (ValueError, IndexError, TypeError):
+                history = []
+        return {"item_nameid": int(nameid.group(1)) if nameid else None,
+                "history": history}
 
     def listing_page_price(self, name: str, cache_s: float = 900) -> Optional[int]:
         """Lowest ask scraped from the item's ordinary market page.
