@@ -13,7 +13,7 @@ import yaml
 
 from .alerts import (AlertRouter, ConsoleChannel, TelegramChannel,
                      WindowsToastChannel)
-from .bot import BOT_QUOTE_CACHE_S, HANDLERS, TelegramBot, answer
+from .bot import BOT_QUOTE_CACHE_S, COMMANDS, HANDLERS, TelegramBot, answer
 from .client import SteamClient
 from .costbasis import CostModel
 from .events import EventCalendar
@@ -335,6 +335,25 @@ def _real_steamid(s) -> bool:
     return bool(s) and str(s).isdigit()     # not the example's 7656119XXXX...
 
 
+# Arguments the self-test passes to the commands that take one.
+SELFTEST_ARGS = {"price": "nitro", "fees": "90", "alerts": "5"}
+
+
+def _selftest(bot, mon) -> None:
+    """Run every bot command and send each answer to Telegram, so the run
+    log says pass/fail and the chat shows what the answers look like."""
+    failed = []
+    for name, _ in COMMANDS:
+        if name in ("login", "logout"):      # these need the phone, not a test
+            continue
+        text = answer(mon, f"/{name} {SELFTEST_ARGS.get(name, '')}".strip())
+        if text.startswith(f"/{name} failed"):
+            failed.append(name)
+        bot.reply(f"[test /{name}]
+{text}")
+    print("selftest:", "all ok" if not failed else "FAILED: " + ", ".join(failed))
+
+
 def cmd_ci(args):
     """One scheduled GitHub Actions run: answer Telegram, import and sweep
     when due, keep answering until the listen window closes, then exit.
@@ -419,6 +438,9 @@ def cmd_ci(args):
     if args.ping:
         bot.reply("Running in GitHub Actions.\n\n" + status_report(bot_mon))
 
+    if args.selftest:
+        _selftest(bot, bot_mon)
+
     left = args.listen_seconds - (time.monotonic() - started)
     handled += bot.listen(max(0.0, left))
     print(f"telegram: {handled} update(s) handled")
@@ -478,6 +500,8 @@ def main():
     c.add_argument("--force-history", action="store_true")
     c.add_argument("--ping", action="store_true",
                    help="send a status message to Telegram")
+    c.add_argument("--selftest", action="store_true",
+                   help="run every bot command and send the output to Telegram")
     c.set_defaults(fn=cmd_ci)
 
     args = ap.parse_args()

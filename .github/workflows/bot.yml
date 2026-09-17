@@ -40,6 +40,10 @@ on:
         description: "Re-import the Steam inventory now"
         type: boolean
         default: false
+      selftest:
+        description: "Run every bot command and send the answers to Telegram"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -103,11 +107,13 @@ jobs:
           PING: ${{ inputs.ping }}
           FORCE_SWEEP: ${{ inputs.force_sweep }}
           FORCE_IMPORT: ${{ inputs.force_import }}
+          SELFTEST: ${{ inputs.selftest }}
         run: |
           args="--listen-seconds 480"
           if [ "$PING" = "true" ]; then args="$args --ping"; fi
           if [ "$FORCE_SWEEP" = "true" ]; then args="$args --force-sweep"; fi
           if [ "$FORCE_IMPORT" = "true" ]; then args="$args --force-import"; fi
+          if [ "$SELFTEST" = "true" ]; then args="$args --selftest"; fi
           python -m steammkt.cli ci $args
 
       - name: Save state
