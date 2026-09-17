@@ -349,8 +349,7 @@ def _selftest(bot, mon) -> None:
         text = answer(mon, f"/{name} {SELFTEST_ARGS.get(name, '')}".strip())
         if text.startswith(f"/{name} failed"):
             failed.append(name)
-        bot.reply(f"[test /{name}]
-{text}")
+        bot.reply(f"[test /{name}]\n{text}")
     print("selftest:", "all ok" if not failed else "FAILED: " + ", ".join(failed))
 
 
