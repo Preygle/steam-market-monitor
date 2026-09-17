@@ -61,14 +61,14 @@ def test_varints_match_protobuf():
     assert sa.pb_decode(sa.pb_int(3, -500))[3] == [(1 << 64) - 500]
 
 
-def test_qr_login_is_requested_as_the_mobile_app():
+def test_qr_login_is_requested_as_a_desktop_client():
     steam = FakeSteam()
     s = sa.begin_qr(post=steam)
     assert (s.client_id, s.challenge_url, s.request_id, s.interval) == \
         (1234, "https://s.team/q/1/abc", b"\x01\x02", 5.0)
     details = sa.pb_decode(steam.calls[0][1][3][0])
     assert details[1] == [sa.DEVICE_NAME.encode()]
-    assert details[2] == [sa.PLATFORM_MOBILE_APP]
+    assert details[2] == [sa.PLATFORM_STEAM_CLIENT]
 
 
 def test_poll_waits_then_returns_the_login():

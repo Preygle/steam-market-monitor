@@ -2,11 +2,12 @@
 Steam login by QR code -- the same flow as the QR on Steam's own login page,
 approved in the Steam mobile app. No password is typed anywhere.
 
-The session is requested as the Steam *mobile app* platform, because for
-that platform the access token is itself a valid steamLoginSecure cookie
-(the WebBrowser platform needs an extra cookie-transfer dance). Each CI run
-turns the long-lived refresh token (~200 days) into a short-lived access
-token with GenerateAccessTokenForApp.
+The session is requested as a Steam *desktop client*: that is what the
+phone app expects to approve from a QR, and for that platform the access
+token is itself a valid steamLoginSecure cookie (the WebBrowser platform
+needs an extra cookie-transfer dance). Each CI run turns the long-lived
+refresh token (~200 days) into a short-lived access token with
+GenerateAccessTokenForApp.
 
 Wire format: IAuthenticationService takes a protobuf request, base64'd into
 the `input_protobuf_encoded` form field, and answers in protobuf with the
@@ -33,14 +34,18 @@ import requests
 
 API = "https://api.steampowered.com/IAuthenticationService/{}/v1/"
 DEVICE_NAME = "steammkt bot (GitHub Actions)"   # shown in your Steam app
-# What node-steam-session sends for its MobileApp platform.
-MOBILE_HEADERS = {
-    "User-Agent": "okhttp/4.9.2",
-    "Cookie": "mobileClient=android; mobileClientVersion=777777 3.10.3",
+# What node-steam-session sends for its SteamClient platform.
+CLIENT_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows; U; Windows NT 10.0; en-US; Valve Steam "
+                  "Client/default/1665786434; ) AppleWebKit/537.36 (KHTML, like "
+                  "Gecko) Chrome/85.0.4183.121 Safari/537.36",
 }
-PLATFORM_MOBILE_APP = 3          # EAuthTokenPlatformType
-OS_ANDROID_UNKNOWN = -500        # EOSType
-GAMING_DEVICE_TYPE = 528         # what the app sends; meaning unknown
+# The Steam app approves sign-ins for a *desktop client* or a browser, not
+# for another phone app -- and a SteamClient access token doubles as the
+# steamLoginSecure cookie, which is what we need it for.
+PLATFORM_STEAM_CLIENT = 1        # EAuthTokenPlatformType
+OS_WINDOWS_11 = 20               # EOSType
+GAMING_DEVICE_TYPE = 1           # a desktop PC
 ERESULT_OK = 1
 
 
@@ -116,7 +121,7 @@ def pb_decode(buf: bytes) -> dict[int, list]:
 
 # ---------------------------------------------------------------- transport
 def _post(url: str, body: bytes) -> tuple[int, Optional[str], bytes]:
-    r = requests.post(url, headers=MOBILE_HEADERS, timeout=20, files={
+    r = requests.post(url, headers=CLIENT_HEADERS, timeout=20, files={
         "input_protobuf_encoded": (None, base64.b64encode(body).decode())})
     return r.status_code, r.headers.get("x-eresult"), r.content
 
@@ -145,8 +150,8 @@ class LoginResult:
 
 
 def begin_qr(post: Optional[Callable] = None) -> QrSession:
-    details = (pb_str(1, DEVICE_NAME) + pb_int(2, PLATFORM_MOBILE_APP)
-               + pb_int(3, OS_ANDROID_UNKNOWN) + pb_int(4, GAMING_DEVICE_TYPE))
+    details = (pb_str(1, DEVICE_NAME) + pb_int(2, PLATFORM_STEAM_CLIENT)
+               + pb_int(3, OS_WINDOWS_11) + pb_int(4, GAMING_DEVICE_TYPE))
     r = call("BeginAuthSessionViaQR", pb_bytes(3, details), post)
     if not all(k in r for k in (1, 2, 3)):
         raise SteamAuthError("BeginAuthSessionViaQR: incomplete response")
